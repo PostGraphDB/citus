@@ -19,11 +19,20 @@
 #include "distributed/errormessage.h"
 #include "distributed/multi_physical_planner.h"
 
-extern DistributedPlan * CreateMergePlan(Query *originalQuery, Query *query,
+extern DistributedPlan * CreateMergePlan(uint64 planId, Query *originalQuery,
+										 Query *query,
 										 PlannerRestrictionContext *
-										 plannerRestrictionContext);
+										 plannerRestrictionContext,
+										 ParamListInfo boundParams);
 extern bool IsLocalTableModification(Oid targetRelationId, Query *query,
 									 uint64 shardId,
 									 RTEListProperties *rteProperties);
+extern void NonPushableMergeCommandExplainScan(CustomScanState *node, List *ancestors,
+											   struct ExplainState *es);
+extern Var * ErrorIfInsertNotMatchTargetDistributionColumn(Oid targetRelationId,
+														  Query *query,
+														  List *sourceJoinColumns);
+extern RangeTblEntry * ExtractMergeSourceRangeTableEntry(Query *query);
+
 
 #endif /* MERGE_PLANNER_H */

@@ -2128,12 +2128,23 @@ CitusCopyDestReceiverStartup(DestReceiver *dest, int operation,
 		int columnCount = inputTupleDescriptor->natts;
 		Oid *finalTypeArray = palloc0(columnCount * sizeof(Oid));
 
-		copyDest->columnCoercionPaths =
-			ColumnCoercionPaths(destTupleDescriptor, inputTupleDescriptor,
-								tableId, columnNameList, finalTypeArray);
-
-		copyDest->columnOutputFunctions =
-			TypeOutputFunctions(columnCount, finalTypeArray, copyOutState->binary);
+		/*
+		 * When copying to intermediate files, we can skip coercions and run them
+		 * when merging into the target tables.
+		 */
+		if (copyDest->skipCoercions)
+		{
+			copyDest->columnOutputFunctions =
+				ColumnOutputFunctions(inputTupleDescriptor, copyOutState->binary);
+		}
+		else
+		{
+			copyDest->columnCoercionPaths =
+				ColumnCoercionPaths(destTupleDescriptor, inputTupleDescriptor,
+									tableId, columnNameList, finalTypeArray);
+			copyDest->columnOutputFunctions =
+				TypeOutputFunctions(columnCount, finalTypeArray, copyOutState->binary);
+		}
 	}
 
 	/* wrap the column names as Values */
@@ -2597,9 +2608,11 @@ ShardIdForTuple(CitusCopyDestReceiver *copyDest, Datum *columnValues, bool *colu
 
 		/* find the partition column value */
 		partitionColumnValue = columnValues[partitionColumnIndex];
-
-		/* annoyingly this is evaluated twice, but at least we don't crash! */
-		partitionColumnValue = CoerceColumnValue(partitionColumnValue, coercePath);
+		if (!copyDest->skipCoercions)
+		{
+			/* annoyingly this is evaluated twice, but at least we don't crash! */
+			partitionColumnValue = CoerceColumnValue(partitionColumnValue, coercePath);
+		}
 	}
 
 	/*
