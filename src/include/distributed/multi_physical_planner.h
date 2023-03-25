@@ -375,6 +375,15 @@ typedef enum InsertSelectMethod
 	INSERT_SELECT_REPARTITION
 } InsertSelectMethod;
 
+/*
+ * MergeExecMethod represents the method to use for MERGE INTO ...
+ * queries.
+ */
+typedef enum MergeExecMethod
+{
+	MERGE_COORDINATOR_REDISTRIBUTION,
+	MERGE_WORKER_REPARTITION
+} MergeExecMethod;
 
 /*
  * DistributedPlan contains all information necessary to execute a
@@ -416,6 +425,9 @@ typedef struct DistributedPlan
 	Query *insertSelectQuery;
 	PlannedStmt *selectPlanForInsertSelect;
 	InsertSelectMethod insertSelectMethod;
+
+	/* MERGE INTO ... via the coordinator redistribution or worker repartition */
+	MergeExecMethod mergeExecMethod;
 
 	/*
 	 * If intermediateResultIdPrefix is non-null, an INSERT ... SELECT

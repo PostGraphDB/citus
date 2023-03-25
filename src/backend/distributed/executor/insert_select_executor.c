@@ -20,6 +20,7 @@
 #include "distributed/insert_select_planner.h"
 #include "distributed/intermediate_results.h"
 #include "distributed/local_executor.h"
+#include "distributed/merge_planner.h"
 #include "distributed/multi_executor.h"
 #include "distributed/multi_partitioning_utils.h"
 #include "distributed/multi_physical_planner.h"
@@ -54,9 +55,6 @@
 /* Config variables managed via guc.c */
 bool EnableRepartitionedInsertSelect = true;
 
-
-static List * TwoPhaseInsertSelectTaskList(Oid targetRelationId, Query *insertSelectQuery,
-										   char *resultIdPrefix);
 static void ExecutePlanIntoRelation(Oid targetRelationId, List *insertTargetList,
 									PlannedStmt *selectPlan, EState *executorState);
 static HTAB * ExecutePlanIntoColocatedIntermediateResults(Oid targetRelationId,
@@ -64,14 +62,7 @@ static HTAB * ExecutePlanIntoColocatedIntermediateResults(Oid targetRelationId,
 														  PlannedStmt *selectPlan,
 														  EState *executorState,
 														  char *intermediateResultIdPrefix);
-static List * BuildColumnNameListFromTargetList(Oid targetRelationId,
-												List *insertTargetList);
 static int PartitionColumnIndexFromColumnList(Oid relationId, List *columnNameList);
-static List * RedistributedInsertSelectTaskList(Query *insertSelectQuery,
-												CitusTableCacheEntry *targetRelation,
-												List **redistributedResults,
-												bool useBinaryFormat);
-static int PartitionColumnIndex(List *insertTargetList, Var *partitionColumn);
 static void WrapTaskListForProjection(List *taskList, List *projectedTargetEntries);
 
 
@@ -303,7 +294,7 @@ NonPushableInsertSelectExecScan(CustomScanState *node)
  * inserts into a target relation and selects from a set of co-located
  * intermediate results.
  */
-static List *
+List *
 TwoPhaseInsertSelectTaskList(Oid targetRelationId, Query *insertSelectQuery,
 							 char *resultIdPrefix)
 {
@@ -316,7 +307,7 @@ TwoPhaseInsertSelectTaskList(Oid targetRelationId, Query *insertSelectQuery,
 	 */
 	Query *insertResultQuery = copyObject(insertSelectQuery);
 	RangeTblEntry *insertRte = ExtractResultRelationRTE(insertResultQuery);
-	RangeTblEntry *selectRte = ExtractSelectRangeTableEntry(insertResultQuery);
+	RangeTblEntry *selectRte = ExtractSourceResultRangeTableEntry(insertResultQuery);
 
 	CitusTableCacheEntry *targetCacheEntry = GetCitusTableCacheEntry(targetRelationId);
 	int shardCount = targetCacheEntry->shardIntervalArrayLength;
@@ -335,8 +326,16 @@ TwoPhaseInsertSelectTaskList(Oid targetRelationId, Query *insertSelectQuery,
 		/* during COPY, the shard ID is appended to the result name */
 		appendStringInfo(resultId, "%s_" UINT64_FORMAT, resultIdPrefix, shardId);
 
+		/*
+		 * For MERGE SQL, use the USING clause list, the main query target list
+		 * is NULL
+		 */
+		List *targetList = IsMergeQuery(insertSelectQuery) ?
+						   selectRte->subquery->targetList :
+						   insertSelectQuery->targetList;
+
 		/* generate the query on the intermediate result */
-		Query *resultSelectQuery = BuildSubPlanResultQuery(insertSelectQuery->targetList,
+		Query *resultSelectQuery = BuildSubPlanResultQuery(targetList,
 														   columnAliasList,
 														   resultId->data);
 
@@ -464,7 +463,7 @@ ExecutePlanIntoRelation(Oid targetRelationId, List *insertTargetList,
  * BuildColumnNameListForCopyStatement build the column name list given the insert
  * target list.
  */
-static List *
+List *
 BuildColumnNameListFromTargetList(Oid targetRelationId, List *insertTargetList)
 {
 	List *columnNameList = NIL;
@@ -535,7 +534,7 @@ IsSupportedRedistributionTarget(Oid targetRelationId)
  * a result name which should be inserted into
  * targetRelation->sortedShardIntervalArray[shardIndex].
  */
-static List *
+List *
 RedistributedInsertSelectTaskList(Query *insertSelectQuery,
 								  CitusTableCacheEntry *targetRelation,
 								  List **redistributedResults,
@@ -550,14 +549,15 @@ RedistributedInsertSelectTaskList(Query *insertSelectQuery,
 	 */
 	Query *insertResultQuery = copyObject(insertSelectQuery);
 	RangeTblEntry *insertRte = ExtractResultRelationRTE(insertResultQuery);
-	RangeTblEntry *selectRte = ExtractSelectRangeTableEntry(insertResultQuery);
-	List *selectTargetList = selectRte->subquery->targetList;
 	Oid targetRelationId = targetRelation->relationId;
 
 	int shardCount = targetRelation->shardIntervalArrayLength;
 	int shardOffset = 0;
 	uint32 taskIdIndex = 1;
 	uint64 jobId = INVALID_JOB_ID;
+
+	RangeTblEntry *selectRte = ExtractSourceResultRangeTableEntry(insertResultQuery);
+	List *selectTargetList = selectRte->subquery->targetList;
 
 	for (shardOffset = 0; shardOffset < shardCount; shardOffset++)
 	{
@@ -632,7 +632,7 @@ RedistributedInsertSelectTaskList(Query *insertSelectQuery,
  * PartitionColumnIndex finds the index of given partition column in the
  * given target list.
  */
-static int
+int
 PartitionColumnIndex(List *insertTargetList, Var *partitionColumn)
 {
 	TargetEntry *insertTargetEntry = NULL;
