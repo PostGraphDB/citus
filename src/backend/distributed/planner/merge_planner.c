@@ -28,12 +28,6 @@
 
 #if PG_VERSION_NUM >= PG_VERSION_15
 
-static DeferredErrorMessage * ErrorIfDistTablesNotColocated(Query *parse,
-															List *
-															distTablesList,
-															PlannerRestrictionContext
-															*
-															plannerRestrictionContext);
 static DeferredErrorMessage * ErrorIfMergeHasUnsupportedTables(Oid targetRelationId,
 															   Query *parse,
 															   List *rangeTableList,
@@ -41,47 +35,12 @@ static DeferredErrorMessage * ErrorIfMergeHasUnsupportedTables(Oid targetRelatio
 															   restrictionContext);
 static bool IsDistributionColumnInMergeSource(Expr *columnExpression, Query *query, bool
 											  skipOuterVars);
-static DeferredErrorMessage * InsertDistributionColumnMatchesSource(Oid targetRelationId,
-																	Query *query);
 static DeferredErrorMessage * MergeQualAndTargetListFunctionsSupported(Oid
 																	   resultRelationId,
 																	   FromExpr *joinTree,
 																	   Node *quals,
 																	   List *targetList,
 																	   CmdType commandType);
-
-
-/*
- * ErrorIfDistTablesNotColocated Checks to see if
- *
- *   - There are a minimum of two distributed tables (source and a target).
- *   - All the distributed tables are indeed colocated.
- *
- * If any of the conditions are not met, it raises an exception.
- */
-static DeferredErrorMessage *
-ErrorIfDistTablesNotColocated(Query *parse, List *distTablesList,
-							  PlannerRestrictionContext *
-							  plannerRestrictionContext)
-{
-	/* All MERGE tables must be distributed */
-	if (list_length(distTablesList) < 2)
-	{
-		return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-							 "For MERGE command, both the source and target "
-							 "must be distributed", NULL, NULL);
-	}
-
-	/* All distributed tables must be colocated */
-	if (!AllDistributedRelationsInRTEListColocated(distTablesList))
-	{
-		return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-							 "For MERGE command, all the distributed tables "
-							 "must be colocated", NULL, NULL);
-	}
-
-	return NULL;
-}
 
 
 /*
@@ -321,104 +280,6 @@ IsDistributionColumnInMergeSource(Expr *columnExpression, Query *query, bool
 
 
 /*
- * InsertDistributionColumnMatchesSource check to see if MERGE is inserting a
- * value into the target which is not from the source table, if so, it
- * raises an exception.
- * Note: Inserting random values other than the joined column values will
- * result in unexpected behaviour of rows ending up in incorrect shards, to
- * prevent such mishaps, we disallow such inserts here.
- */
-static DeferredErrorMessage *
-InsertDistributionColumnMatchesSource(Oid targetRelationId, Query *query)
-{
-	Assert(IsMergeQuery(query));
-
-	if (!IsCitusTableType(targetRelationId, DISTRIBUTED_TABLE))
-	{
-		return NULL;
-	}
-
-	if (!HasDistributionKey(targetRelationId))
-	{
-		return NULL;
-	}
-
-	bool foundDistributionColumn = false;
-	MergeAction *action = NULL;
-	foreach_ptr(action, query->mergeActionList)
-	{
-		/* Skip MATCHED clause as INSERTS are not allowed in it*/
-		if (action->matched)
-		{
-			continue;
-		}
-
-		/* NOT MATCHED can have either INSERT or DO NOTHING */
-		if (action->commandType == CMD_NOTHING)
-		{
-			return NULL;
-		}
-
-		if (action->targetList == NIL)
-		{
-			/* INSERT DEFAULT VALUES is not allowed */
-			return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-								 "cannot perform MERGE INSERT with DEFAULTS",
-								 NULL, NULL);
-		}
-
-		Assert(action->commandType == CMD_INSERT);
-		Var *targetKey = PartitionColumn(targetRelationId, 1);
-
-		TargetEntry *targetEntry = NULL;
-		foreach_ptr(targetEntry, action->targetList)
-		{
-			AttrNumber originalAttrNo = targetEntry->resno;
-
-			/* skip processing of target table non-partition columns */
-			if (originalAttrNo != targetKey->varattno)
-			{
-				continue;
-			}
-
-			foundDistributionColumn = true;
-
-			if (IsA(targetEntry->expr, Var))
-			{
-				if (IsDistributionColumnInMergeSource(targetEntry->expr, query, true))
-				{
-					return NULL;
-				}
-				else
-				{
-					return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-										 "MERGE INSERT must use the source table "
-										 "distribution column value",
-										 NULL, NULL);
-				}
-			}
-			else
-			{
-				return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-									 "MERGE INSERT must refer a source column "
-									 "for distribution column ",
-									 NULL, NULL);
-			}
-		}
-
-		if (!foundDistributionColumn)
-		{
-			return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-								 "MERGE INSERT must have distribution column as value",
-								 NULL, NULL);
-		}
-	}
-
-	return NULL;
-}
-
-
-/*
  * MergeQualAndTargetListFunctionsSupported Checks WHEN/ON clause actions to see what functions
  * are allowed, if we are updating distribution column, etc.
  */
@@ -555,124 +416,6 @@ MergeQualAndTargetListFunctionsSupported(Oid resultRelationId, FromExpr *joinTre
 
 
 #endif
-
-
-/*
- * MergeQuerySupported does check for a MERGE command in the query, if it finds
- * one, it will verify the below criteria
- * - Supported tables and combinations in ErrorIfMergeHasUnsupportedTables
- * - Distributed tables requirements in ErrorIfDistTablesNotColocated
- * - Checks target-lists and functions-in-quals in TargetlistAndFunctionsSupported
- */
-DeferredErrorMessage *
-MergeQuerySupported(Oid resultRelationId, Query *originalQuery, bool multiShardQuery,
-					PlannerRestrictionContext *plannerRestrictionContext)
-{
-	/* function is void for pre-15 versions of Postgres */
-	#if PG_VERSION_NUM < PG_VERSION_15
-
-	return NULL;
-
-	#else
-
-	/*
-	 * TODO: For now, we are adding an exception where any volatile or stable
-	 * functions are not allowed in the MERGE query, but this will become too
-	 * restrictive as this will prevent many useful and simple cases, such as,
-	 * INSERT VALUES(ts::timestamp), bigserial column inserts etc. But without
-	 * this restriction, we have a potential danger of some of the function(s)
-	 * getting executed at the worker which will result in incorrect behavior.
-	 */
-	if (contain_mutable_functions((Node *) originalQuery))
-	{
-		return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-							 "non-IMMUTABLE functions are not yet supported "
-							 "in MERGE sql with distributed tables ",
-							 NULL, NULL);
-	}
-
-	List *rangeTableList = ExtractRangeTableEntryList(originalQuery);
-
-	/*
-	 * Fast path queries cannot have merge command, and we prevent the remaining here.
-	 * In Citus we have limited support for MERGE, it's allowed only if all
-	 * the tables(target, source or any CTE) tables are are local i.e. a
-	 * combination of Citus local and Non-Citus tables (regular Postgres tables)
-	 * or distributed tables with some restrictions, please see header of routine
-	 * ErrorIfDistTablesNotColocated for details.
-	 */
-	DeferredErrorMessage *deferredError =
-		ErrorIfMergeHasUnsupportedTables(resultRelationId,
-										 originalQuery,
-										 rangeTableList,
-										 plannerRestrictionContext);
-	if (deferredError)
-	{
-		/* MERGE's unsupported combination, raise the exception */
-		RaiseDeferredError(deferredError, ERROR);
-	}
-
-	deferredError = MergeQualAndTargetListFunctionsSupported(resultRelationId,
-															 originalQuery->jointree,
-															 originalQuery->jointree->
-															 quals,
-															 originalQuery->targetList,
-															 originalQuery->commandType);
-	if (deferredError)
-	{
-		return deferredError;
-	}
-
-	/*
-	 * MERGE is a special case where we have multiple modify statements
-	 * within itself. Check each INSERT/UPDATE/DELETE individually.
-	 */
-	MergeAction *action = NULL;
-	foreach_ptr(action, originalQuery->mergeActionList)
-	{
-		Assert(originalQuery->returningList == NULL);
-		deferredError = MergeQualAndTargetListFunctionsSupported(resultRelationId,
-																 originalQuery->jointree,
-																 action->qual,
-																 action->targetList,
-																 action->commandType);
-		if (deferredError)
-		{
-			/* MERGE's unsupported scenario, raise the exception */
-			RaiseDeferredError(deferredError, ERROR);
-		}
-	}
-
-	deferredError =
-		InsertDistributionColumnMatchesSource(resultRelationId, originalQuery);
-	if (deferredError)
-	{
-		/* MERGE's unsupported scenario, raise the exception */
-		RaiseDeferredError(deferredError, ERROR);
-	}
-
-	if (multiShardQuery)
-	{
-		deferredError =
-			DeferErrorIfUnsupportedSubqueryPushdown(originalQuery,
-													plannerRestrictionContext);
-		if (deferredError)
-		{
-			return deferredError;
-		}
-	}
-
-	if (HasDangerousJoinUsing(originalQuery->rtable, (Node *) originalQuery->jointree))
-	{
-		return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-							 "a join with USING causes an internal naming "
-							 "conflict, use ON instead", NULL, NULL);
-	}
-
-	return NULL;
-
-	#endif
-}
 
 
 /*

@@ -19,11 +19,6 @@
 #include "distributed/errormessage.h"
 #include "distributed/multi_physical_planner.h"
 
-extern DeferredErrorMessage * MergeQuerySupported(Oid resultRelationId,
-												  Query *originalQuery,
-												  bool multiShardQuery,
-												  PlannerRestrictionContext *
-												  plannerRestrictionContext);
 extern DistributedPlan * CreateMergePlan(Query *originalQuery, Query *query,
 										 PlannerRestrictionContext *
 										 plannerRestrictionContext);
