@@ -1909,17 +1909,32 @@ RouterJob(Query *originalQuery, PlannerRestrictionContext *plannerRestrictionCon
 	{
 		RangeTblEntry *updateOrDeleteOrMergeRTE = ExtractResultRelationRTE(originalQuery);
 
-		/*
-		 * If all of the shards are pruned, we replace the relation RTE into
-		 * subquery RTE that returns no results. However, this is not useful
-		 * for UPDATE and DELETE queries. Therefore, if we detect a UPDATE or
-		 * DELETE RTE with subquery type, we just set task list to empty and return
-		 * the job.
-		 */
 		if (updateOrDeleteOrMergeRTE->rtekind == RTE_SUBQUERY)
 		{
-			job->taskList = NIL;
-			return job;
+			/*
+			 * Not generating tasks for MERGE target relation might
+			 * result in incorrect behavior as source rows with NOT
+			 * MATCHED clause might qualify for insertion.
+			 */
+			if (IsMergeQuery(originalQuery))
+			{
+				ereport(ERROR, (errmsg("Unexpected error, for a MERGE "
+									   "router query, we must have a "
+									   "task for target relation")));
+			}
+			else
+			{
+				/*
+				 * If all of the shards are pruned, we replace the
+				 * relation RTE into subquery RTE that returns no
+				 * results. However, this is not useful for UPDATE
+				 * and DELETE queries. Therefore, if we detect a
+				 * UPDATE or DELETE RTE with subquery type, we just
+				 * set task list to empty and return the job.
+				 */
+				job->taskList = NIL;
+				return job;
+			}
 		}
 	}
 

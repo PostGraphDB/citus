@@ -433,4 +433,59 @@ WHEN NOT MATCHED THEN
 
 SELECT compare_data();
 
+--
+-- Test target with false clause
+--
+SELECT cleanup_data();
+SELECT setup_data();
+SELECT create_distributed_table('citus_target', 'id');
+SELECT create_distributed_table('citus_source', 'id');
+
+MERGE INTO pg_target t
+USING (SELECT * FROM pg_source WHERE id > 25000) AS s
+ON t.id = s.id AND t.id < 25000
+WHEN MATCHED AND t.id <= 55000 THEN
+        UPDATE SET val = s.val + 1
+WHEN MATCHED THEN
+        DELETE
+WHEN NOT MATCHED THEN
+        INSERT VALUES(s.id, s.val);
+
+MERGE INTO citus_target t
+USING (SELECT * FROM citus_source WHERE id > 25000) AS s
+ON t.id = s.id AND t.id < 25000
+WHEN MATCHED AND t.id <= 55000 THEN
+        UPDATE SET val = s.val + 1
+WHEN MATCHED THEN
+        DELETE
+WHEN NOT MATCHED THEN
+        INSERT VALUES(s.id, s.val);
+SELECT compare_data();
+
+SELECT cleanup_data();
+SELECT setup_data();
+SELECT create_distributed_table('citus_target', 'id');
+SELECT create_distributed_table('citus_source', 'id');
+
+MERGE INTO pg_target t
+USING (SELECT * FROM pg_source WHERE id = 25000) AS s
+ON t.id = s.id AND t.id = 50000
+WHEN MATCHED AND t.id <= 55000 THEN
+        UPDATE SET val = s.val + 1
+WHEN MATCHED THEN
+        DELETE
+WHEN NOT MATCHED THEN
+        INSERT VALUES(s.id, s.val);
+
+MERGE INTO citus_target t
+USING (SELECT * FROM citus_source WHERE id = 25000) AS s
+ON t.id = s.id AND t.id = 50000
+WHEN MATCHED AND t.id <= 55000 THEN
+        UPDATE SET val = s.val + 1
+WHEN MATCHED THEN
+        DELETE
+WHEN NOT MATCHED THEN
+        INSERT VALUES(s.id, s.val);
+SELECT compare_data();
+
 DROP SCHEMA merge_repartition_schema CASCADE;
