@@ -433,4 +433,25 @@ WHEN NOT MATCHED THEN
 
 SELECT compare_data();
 
+-- Test source-query that requires repartitioning on of MERGE repartitioning
+SELECT cleanup_data();
+SELECT setup_data();
+SELECT create_distributed_table('citus_target', 'id');
+SELECT create_distributed_table('citus_source', 'id', colocate_with=>'none');
+
+MERGE INTO pg_target t
+USING (SELECT s1.val FROM pg_source s1 JOIN pg_source s2 USING (val)) AS s
+ON t.id = s.val
+WHEN MATCHED THEN
+      UPDATE SET val = t.val + 1;
+
+SET citus.enable_repartition_joins TO true;
+MERGE INTO citus_target t
+USING (SELECT s1.val FROM citus_source s1 JOIN citus_source s2 USING (val)) AS s
+ON t.id = s.val
+WHEN MATCHED THEN
+      UPDATE SET val = t.val + 1;
+
+SELECT compare_data();
+
 DROP SCHEMA merge_repartition_schema CASCADE;

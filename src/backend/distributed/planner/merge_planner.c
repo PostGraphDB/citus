@@ -31,6 +31,7 @@
 #include "distributed/pg_version_constants.h"
 #include "distributed/query_pushdown_planning.h"
 #include "distributed/query_colocation_checker.h"
+#include "distributed/repartition_executor.h"
 
 #if PG_VERSION_NUM >= PG_VERSION_15
 
@@ -223,7 +224,7 @@ CreateRepartitionMergePlan(Oid targetRelationId, uint64 planId, Query *originalQ
 												boundParams);
 
 	/* If plan is distributed, no work at the coordinator */
-	if (IsCitusCustomScan(sourceRowsPlan->planTree))
+	if (IsRedistributablePlan(sourceRowsPlan->planTree, targetRelationId))
 	{
 		distributedPlan->modifyWithSelectMethod = MODIFY_WITH_SELECT_REPARTITION;
 	}

@@ -999,6 +999,78 @@ SQL function "compare_data" statement 2
 
 (1 row)
 
+-- Test source-query that requires repartitioning on of MERGE repartitioning
+SELECT cleanup_data();
+NOTICE:  creating a new table for merge_repartition_schema.citus_target
+CONTEXT:  SQL function "cleanup_data" statement 5
+NOTICE:  moving the data of merge_repartition_schema.citus_target
+CONTEXT:  SQL function "cleanup_data" statement 5
+NOTICE:  dropping the old merge_repartition_schema.citus_target
+CONTEXT:  SQL function "cleanup_data" statement 5
+NOTICE:  renaming the new table to merge_repartition_schema.citus_target
+CONTEXT:  SQL function "cleanup_data" statement 5
+NOTICE:  creating a new table for merge_repartition_schema.citus_source
+CONTEXT:  SQL function "cleanup_data" statement 6
+NOTICE:  moving the data of merge_repartition_schema.citus_source
+CONTEXT:  SQL function "cleanup_data" statement 6
+NOTICE:  dropping the old merge_repartition_schema.citus_source
+CONTEXT:  SQL function "cleanup_data" statement 6
+NOTICE:  renaming the new table to merge_repartition_schema.citus_source
+CONTEXT:  SQL function "cleanup_data" statement 6
+ cleanup_data
+---------------------------------------------------------------------
+
+(1 row)
+
+SELECT setup_data();
+ setup_data
+---------------------------------------------------------------------
+
+(1 row)
+
+SELECT create_distributed_table('citus_target', 'id');
+NOTICE:  Copying data from local table...
+NOTICE:  copying the data has completed
+DETAIL:  The local data in the table is no longer visible, but is still on disk.
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_target$$)
+ create_distributed_table
+---------------------------------------------------------------------
+
+(1 row)
+
+SELECT create_distributed_table('citus_source', 'id', colocate_with=>'none');
+NOTICE:  Copying data from local table...
+NOTICE:  copying the data has completed
+DETAIL:  The local data in the table is no longer visible, but is still on disk.
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_source$$)
+ create_distributed_table
+---------------------------------------------------------------------
+
+(1 row)
+
+MERGE INTO pg_target t
+USING (SELECT s1.val FROM pg_source s1 JOIN pg_source s2 USING (val)) AS s
+ON t.id = s.val
+WHEN MATCHED THEN
+      UPDATE SET val = t.val + 1;
+SET citus.enable_repartition_joins TO true;
+MERGE INTO citus_target t
+USING (SELECT s1.val FROM citus_source s1 JOIN citus_source s2 USING (val)) AS s
+ON t.id = s.val
+WHEN MATCHED THEN
+      UPDATE SET val = t.val + 1;
+SELECT compare_data();
+NOTICE:  The average of pg_target.id is equal to citus_target.id
+CONTEXT:  PL/pgSQL function check_data(text,text,text,text) line XX at RAISE
+SQL function "compare_data" statement 1
+NOTICE:  The average of pg_target.val is equal to citus_target.val
+CONTEXT:  PL/pgSQL function check_data(text,text,text,text) line XX at RAISE
+SQL function "compare_data" statement 2
+ compare_data
+---------------------------------------------------------------------
+
+(1 row)
+
 DROP SCHEMA merge_repartition_schema CASCADE;
 NOTICE:  drop cascades to 8 other objects
 DETAIL:  drop cascades to table pg_target
