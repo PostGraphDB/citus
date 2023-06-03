@@ -2889,7 +2889,7 @@ WHEN NOT MATCHED THEN
                                                   QUERY PLAN
 ---------------------------------------------------------------------
  Custom Scan (Citus MERGE INTO ...)
-   MERGE INTO demo_distributed method: repartition
+   MERGE INTO demo_distributed method: pull to coordinator
    ->  Custom Scan (Citus Adaptive)
          ->  Distributed Subplan XXX_1
                ->  Limit
@@ -3714,8 +3714,7 @@ DEBUG:  For MERGE command, all the distributed tables must be colocated
 DEBUG:  Creating MERGE repartition plan
 DEBUG:  Distributed planning for a fast-path router query
 DEBUG:  Creating router plan
-DEBUG:  Executing subplans of the source query and storing the results at the respective node(s)
-DEBUG:  Redistributing source result rows across nodes
+DEBUG:  Collect source query results on coordinator
 ERROR:  Missing required join condition between source and target's distribution column
 HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 MERGE INTO nullkey_c1_t1 USING nullkey_c2_t1 ON (nullkey_c1_t1.a = nullkey_c2_t1.a)
@@ -3726,8 +3725,7 @@ DEBUG:  For MERGE command, all the distributed tables must be colocated
 DEBUG:  Creating MERGE repartition plan
 DEBUG:  Distributed planning for a fast-path router query
 DEBUG:  Creating router plan
-DEBUG:  Executing subplans of the source query and storing the results at the respective node(s)
-DEBUG:  Redistributing source result rows across nodes
+DEBUG:  Collect source query results on coordinator
 ERROR:  Missing required join condition between source and target's distribution column
 HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 -- with a distributed table
@@ -3738,8 +3736,7 @@ DEBUG:  Distributed tables are not co-located, try repartitioning
 DEBUG:  For MERGE command, all the distributed tables must be colocated
 DEBUG:  Creating MERGE repartition plan
 DEBUG:  Router planner cannot handle multi-shard select queries
-DEBUG:  Executing subplans of the source query and storing the results at the respective node(s)
-DEBUG:  Redistributing source result rows across nodes
+DEBUG:  Collect source query results on coordinator
 ERROR:  Missing required join condition between source and target's distribution column
 HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 MERGE INTO distributed_table USING nullkey_c1_t1 ON (nullkey_c1_t1.a = distributed_table.a)
@@ -3750,10 +3747,17 @@ DEBUG:  For MERGE command, all the distributed tables must be colocated
 DEBUG:  Creating MERGE repartition plan
 DEBUG:  Distributed planning for a fast-path router query
 DEBUG:  Creating router plan
-DEBUG:  Executing subplans of the source query and storing the results at the respective node(s)
-DEBUG:  Redistributing source result rows across nodes
+DEBUG:  Collect source query results on coordinator
 DEBUG:  Using column - index:0 from the source list to redistribute
-DEBUG:  Executing final MERGE on workers using intermediate results
+DEBUG:  Create a MERGE task list that needs to be routed
+DEBUG:  <Deparsed MERGE query: MERGE INTO query_single_shard_table.distributed_table_4000173 citus_table_alias USING (SELECT intermediate_result.a, intermediate_result.b FROM read_intermediate_result('merge_into_321_4000173'::text, 'binary'::citus_copy_format) intermediate_result(a integer, b integer)) nullkey_c1_t1 ON (nullkey_c1_t1.a OPERATOR(pg_catalog.=) citus_table_alias.a) WHEN MATCHED THEN DELETE WHEN NOT MATCHED THEN INSERT (a, b) VALUES (nullkey_c1_t1.a, nullkey_c1_t1.b)>
+DEBUG:  distributed statement: MERGE INTO query_single_shard_table.distributed_table_4000173 citus_table_alias USING (SELECT intermediate_result.a, intermediate_result.b FROM read_intermediate_result('merge_into_321_4000173'::text, 'binary'::citus_copy_format) intermediate_result(a integer, b integer)) nullkey_c1_t1 ON (nullkey_c1_t1.a OPERATOR(pg_catalog.=) citus_table_alias.a) WHEN MATCHED THEN DELETE WHEN NOT MATCHED THEN INSERT (a, b) VALUES (nullkey_c1_t1.a, nullkey_c1_t1.b)
+DEBUG:  <Deparsed MERGE query: MERGE INTO query_single_shard_table.distributed_table_4000174 citus_table_alias USING (SELECT intermediate_result.a, intermediate_result.b FROM read_intermediate_result('merge_into_321_4000174'::text, 'binary'::citus_copy_format) intermediate_result(a integer, b integer)) nullkey_c1_t1 ON (nullkey_c1_t1.a OPERATOR(pg_catalog.=) citus_table_alias.a) WHEN MATCHED THEN DELETE WHEN NOT MATCHED THEN INSERT (a, b) VALUES (nullkey_c1_t1.a, nullkey_c1_t1.b)>
+DEBUG:  distributed statement: MERGE INTO query_single_shard_table.distributed_table_4000174 citus_table_alias USING (SELECT intermediate_result.a, intermediate_result.b FROM read_intermediate_result('merge_into_321_4000174'::text, 'binary'::citus_copy_format) intermediate_result(a integer, b integer)) nullkey_c1_t1 ON (nullkey_c1_t1.a OPERATOR(pg_catalog.=) citus_table_alias.a) WHEN MATCHED THEN DELETE WHEN NOT MATCHED THEN INSERT (a, b) VALUES (nullkey_c1_t1.a, nullkey_c1_t1.b)
+DEBUG:  <Deparsed MERGE query: MERGE INTO query_single_shard_table.distributed_table_4000175 citus_table_alias USING (SELECT intermediate_result.a, intermediate_result.b FROM read_intermediate_result('merge_into_321_4000175'::text, 'binary'::citus_copy_format) intermediate_result(a integer, b integer)) nullkey_c1_t1 ON (nullkey_c1_t1.a OPERATOR(pg_catalog.=) citus_table_alias.a) WHEN MATCHED THEN DELETE WHEN NOT MATCHED THEN INSERT (a, b) VALUES (nullkey_c1_t1.a, nullkey_c1_t1.b)>
+DEBUG:  distributed statement: MERGE INTO query_single_shard_table.distributed_table_4000175 citus_table_alias USING (SELECT intermediate_result.a, intermediate_result.b FROM read_intermediate_result('merge_into_321_4000175'::text, 'binary'::citus_copy_format) intermediate_result(a integer, b integer)) nullkey_c1_t1 ON (nullkey_c1_t1.a OPERATOR(pg_catalog.=) citus_table_alias.a) WHEN MATCHED THEN DELETE WHEN NOT MATCHED THEN INSERT (a, b) VALUES (nullkey_c1_t1.a, nullkey_c1_t1.b)
+DEBUG:  <Deparsed MERGE query: MERGE INTO query_single_shard_table.distributed_table_4000176 citus_table_alias USING (SELECT intermediate_result.a, intermediate_result.b FROM read_intermediate_result('merge_into_321_4000176'::text, 'binary'::citus_copy_format) intermediate_result(a integer, b integer)) nullkey_c1_t1 ON (nullkey_c1_t1.a OPERATOR(pg_catalog.=) citus_table_alias.a) WHEN MATCHED THEN DELETE WHEN NOT MATCHED THEN INSERT (a, b) VALUES (nullkey_c1_t1.a, nullkey_c1_t1.b)>
+DEBUG:  distributed statement: MERGE INTO query_single_shard_table.distributed_table_4000176 citus_table_alias USING (SELECT intermediate_result.a, intermediate_result.b FROM read_intermediate_result('merge_into_321_4000176'::text, 'binary'::citus_copy_format) intermediate_result(a integer, b integer)) nullkey_c1_t1 ON (nullkey_c1_t1.a OPERATOR(pg_catalog.=) citus_table_alias.a) WHEN MATCHED THEN DELETE WHEN NOT MATCHED THEN INSERT (a, b) VALUES (nullkey_c1_t1.a, nullkey_c1_t1.b)
 -- with a reference table
 MERGE INTO nullkey_c1_t1 USING reference_table ON (nullkey_c1_t1.a = reference_table.a)
 WHEN MATCHED THEN UPDATE SET b = reference_table.b;
@@ -3762,8 +3766,7 @@ DEBUG:  A mix of distributed and reference table, routable query is not possible
 DEBUG:  Creating MERGE repartition plan
 DEBUG:  Distributed planning for a fast-path router query
 DEBUG:  Creating router plan
-DEBUG:  Executing subplans of the source query and storing the results at the respective node(s)
-DEBUG:  Redistributing source result rows across nodes
+DEBUG:  Collect source query results on coordinator
 ERROR:  Missing required join condition between source and target's distribution column
 HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 MERGE INTO reference_table USING nullkey_c1_t1 ON (nullkey_c1_t1.a = reference_table.a)
@@ -3778,8 +3781,7 @@ DEBUG:  A mix of distributed and citus-local table, routable query is not possib
 DEBUG:  Creating MERGE repartition plan
 DEBUG:  Distributed planning for a fast-path router query
 DEBUG:  Creating router plan
-DEBUG:  Executing subplans of the source query and storing the results at the respective node(s)
-DEBUG:  Redistributing source result rows across nodes
+DEBUG:  Collect source query results on coordinator
 ERROR:  Missing required join condition between source and target's distribution column
 HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 MERGE INTO citus_local_table USING nullkey_c1_t1 ON (nullkey_c1_t1.a = citus_local_table.a)
@@ -3817,8 +3819,7 @@ DEBUG:  Distributed tables are not co-located, try repartitioning
 DEBUG:  For MERGE command, all the distributed tables must be colocated
 DEBUG:  Creating MERGE repartition plan
 DEBUG:  Router planner cannot handle multi-shard select queries
-DEBUG:  Executing subplans of the source query and storing the results at the respective node(s)
-DEBUG:  Redistributing source result rows across nodes
+DEBUG:  Collect source query results on coordinator
 ERROR:  Missing required join condition between source and target's distribution column
 HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 WITH cte AS materialized (
@@ -3830,8 +3831,7 @@ DEBUG:  Distributed tables are not co-located, try repartitioning
 DEBUG:  For MERGE command, all the distributed tables must be colocated
 DEBUG:  Creating MERGE repartition plan
 DEBUG:  Router planner cannot handle multi-shard select queries
-DEBUG:  Executing subplans of the source query and storing the results at the respective node(s)
-DEBUG:  Redistributing source result rows across nodes
+DEBUG:  Collect source query results on coordinator
 ERROR:  Missing required join condition between source and target's distribution column
 HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 SET client_min_messages TO WARNING;

@@ -31,7 +31,6 @@
 static int sourceResultPartitionColumnIndex(Query *mergeQuery,
 											List *sourceTargetList,
 											CitusTableCacheEntry *targetRelation);
-static bool ExtractEqualOpExprWalker(Node *node, List **equalOpExprList);
 static void ExecuteSourceAtWorkerAndRepartition(CitusScanState *scanState);
 static void ExecuteSourceAtCoordAndRedistribution(CitusScanState *scanState);
 static HTAB * ExecuteMergeSourcePlanIntoColocatedIntermediateResults(Oid targetRelationId,
@@ -294,51 +293,17 @@ ExecuteSourceAtCoordAndRedistribution(CitusScanState *scanState)
 
 
 /*
- * ExtractEqualOpExprWalker traverses the ON clause and gathers
- * all expressions of the following types: ... ON t.id = s.id
- * or t.id = <const>
- */
-static bool
-ExtractEqualOpExprWalker(Node *node, List **equalOpExprList)
-{
-	if (node == NULL)
-	{
-		return false;
-	}
-
-	if (NodeIsEqualsOpExpr(node))
-	{
-		OpExpr *eqExpr = (OpExpr *) node;
-		(*equalOpExprList) = lappend(*equalOpExprList, eqExpr);
-	}
-
-	bool walkerResult =
-		expression_tree_walker(node, ExtractEqualOpExprWalker,
-							   equalOpExprList);
-	return walkerResult;
-}
-
-
-/*
- * sourceResultPartitionColumnIndex collects all the "=" expressions from the
- * provided quals and verifies if there is a join, either left or right, with
- * the distribution column of the given target. Once a match is found, it returns
- * the index of that match in the source's target list.
+ * sourceResultPartitionColumnIndex collects all Join conditions from the
+ * ON clause and verifies if there is a join, either left or right, with
+ * the distribution column of the given target. Once a match is found, it
+ * returns the index of that match in the source's target list.
  */
 static int
 sourceResultPartitionColumnIndex(Query *mergeQuery, List *sourceTargetList,
 								 CitusTableCacheEntry *targetRelation)
 {
-	Node *quals = mergeQuery->jointree->quals;
-
-	if (IsA(quals, List))
-	{
-		quals = (Node *) make_ands_explicit((List *) quals);
-	}
-
 	/* Get all the equal(=) expressions from the ON clause */
-	List *equalOpExprList = NIL;
-	ExtractEqualOpExprWalker((Node *) quals, &equalOpExprList);
+	List *mergeJoinConditionList = QualifierList(mergeQuery->jointree);
 
 	/*
 	 * Now that we have gathered all the _equal_ expressions in the list, we proceed
@@ -347,7 +312,7 @@ sourceResultPartitionColumnIndex(Query *mergeQuery, List *sourceTargetList,
 	Var *targetColumn = targetRelation->partitionColumn;
 	List *sourceJoinColumns = NIL;
 	Node *joinClause = NULL;
-	foreach_ptr(joinClause, equalOpExprList)
+	foreach_ptr(joinClause, mergeJoinConditionList)
 	{
 		Node *leftOperand;
 		Node *rightOperand;
