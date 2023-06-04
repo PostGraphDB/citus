@@ -1834,6 +1834,27 @@ ON t.val1 = s.key2 AND t.id1 = s.key AND t.id1 = s.key2
 WHEN NOT MATCHED THEN
 	INSERT VALUES(s.key2, 444);
 
+-- Test aggregate functions in source-query
+SELECT COUNT(*) FROM demo_distributed where val1 = 150;
+SELECT COUNT(*) FROM demo_distributed where id1 = 2;
+
+-- One row with Key=7 updated in demo_distributed to 150
+MERGE INTO demo_distributed t
+USING (SELECT count(DISTINCT id2) as key FROM demo_source_table GROUP BY val2) s
+ON t.id1 = s.key
+WHEN NOT MATCHED THEN INSERT VALUES(s.key, 1)
+WHEN MATCHED THEN UPDATE SET val1 = 150;
+
+-- Seven rows with Key=2 inserted in demo_distributed
+MERGE INTO demo_distributed t
+USING (SELECT count(DISTINCT val2) + 1 as key FROM demo_source_table GROUP BY id2) s
+ON t.id1 = s.key
+WHEN NOT MATCHED THEN INSERT VALUES(s.key, 1)
+WHEN MATCHED THEN UPDATE SET val1 = 150;
+
+SELECT COUNT(*) FROM demo_distributed where val1 = 150;
+SELECT COUNT(*) FROM demo_distributed where id1 = 2;
+
 --
 -- Error and Unsupported scenarios
 --

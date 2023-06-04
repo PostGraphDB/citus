@@ -181,9 +181,9 @@ ExecuteSourceAtWorkerAndRepartition(CitusScanState *scanState)
 	 */
 	List *taskList =
 		GenerateTaskListWithRedistributedResults(mergeQuery,
-										  targetRelation,
-										  redistributedResults,
-										  binaryFormat);
+												 targetRelation,
+												 redistributedResults,
+												 binaryFormat);
 
 	scanState->tuplestorestate =
 		tuplestore_begin_heap(randomAccess, interTransactions, work_mem);
@@ -249,7 +249,7 @@ ExecuteSourceAtCoordAndRedistribution(CitusScanState *scanState)
 	/* generate tasks for the .. phase */
 	List *taskList =
 		GenerateTaskListWithColocatedIntermediateResults(targetRelationId, mergeQuery,
-									 intermediateResultIdPrefix);
+														 intermediateResultIdPrefix);
 
 	/*
 	 * We cannot actually execute MERGE INTO ... tasks that read from

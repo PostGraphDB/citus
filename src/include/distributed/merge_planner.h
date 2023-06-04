@@ -30,8 +30,8 @@ extern bool IsLocalTableModification(Oid targetRelationId, Query *query,
 extern void NonPushableMergeCommandExplainScan(CustomScanState *node, List *ancestors,
 											   struct ExplainState *es);
 extern Var * ErrorIfInsertNotMatchTargetDistributionColumn(Oid targetRelationId,
-														  Query *query,
-														  List *sourceJoinColumns);
+														   Query *query,
+														   List *sourceJoinColumns);
 extern RangeTblEntry * ExtractMergeSourceRangeTableEntry(Query *query);
 
 

@@ -144,13 +144,13 @@ GenerateTaskListWithColocatedIntermediateResults(Oid targetRelationId,
 		 * is NULL
 		 */
 		List *targetList = IsMergeQuery(modifyQueryViaCoordinatorOrRepartition) ?
-					selectRte->subquery->targetList :
-					modifyQueryViaCoordinatorOrRepartition->targetList;
+						   selectRte->subquery->targetList :
+						   modifyQueryViaCoordinatorOrRepartition->targetList;
 
 		/* generate the query on the intermediate result */
 		Query *resultSelectQuery = BuildSubPlanResultQuery(targetList,
-						columnAliasList,
-						resultId->data);
+														   columnAliasList,
+														   resultId->data);
 
 		/* put the intermediate result query in the INSERT..SELECT */
 		selectRte->subquery = resultSelectQuery;

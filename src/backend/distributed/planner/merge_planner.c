@@ -35,6 +35,7 @@
 
 #if PG_VERSION_NUM >= PG_VERSION_15
 
+static Var * ErrorIfEntryExprNotSupported(Expr *entryExpr);
 static void ErrorIfMergeQueryQualAndTargetListNotSupported(Oid targetRelationId,
 														   Query *originalQuery);
 static void ErrorIfMergeNotSupported(Query *query, Oid targetRelationId,
@@ -781,7 +782,7 @@ ConvertSourceRTEIntoSubquery(Query *mergeQuery, RangeTblEntry *sourceRte,
 	{
 		case RTE_SUBQUERY:
 		{
-			/* If RTE is already a subquery, this is a no-op */
+			sourceRte->subquery = WrapSubquery(sourceRte->subquery);
 			return;
 		}
 
@@ -881,7 +882,7 @@ DeferErrorIfRoutableMergeNotSupported(Query *query, List *rangeTableList,
 		return NULL;
 	}
 
-	/* Only one distributed tablle is involved in the MERGE */
+	/* Only one distributed table is involved in the MERGE */
 	if (list_length(distTablesList) == 1)
 	{
 		return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
@@ -1043,6 +1044,56 @@ ExtractMergeSourceRangeTableEntry(Query *query)
 
 
 /*
+ * ErrorIfEntryExprNotSupported Checks for valid expressions of type Var, and
+ * returns the Var if it finds one, for evrything else, raises an exception.
+ */
+static Var *
+ErrorIfEntryExprNotSupported(Expr *entryExpr)
+{
+	switch (entryExpr->type)
+	{
+		case T_Var:
+		{
+			/* Found a Var inserting into target's distribution column */
+			return (Var *) entryExpr;
+		}
+
+		case T_Const:
+		{
+			/* Inserting constant VALUES is not allowed */
+			ereport(ERROR, (errmsg("MERGE INSERT must refer a source column "
+								   "for distribution column")));
+			break;
+		}
+
+		case T_FuncExpr:
+		{
+			FuncExpr *funcExpr = (FuncExpr *) entryExpr;
+
+			if (funcExpr->funcformat == COERCE_IMPLICIT_CAST &&
+				list_length(funcExpr->args) == 1 &&
+				IsA(linitial(funcExpr->args), Var))
+			{
+				return (Var *) linitial(funcExpr->args);
+			}
+
+			ereport(ERROR, (errmsg("MERGE INSERT is using a function call "
+								   "for distribution column")));
+			break;
+		}
+
+		default:
+		{
+			ereport(ERROR, (errmsg("MERGE INSERT is using an incorrect value "
+								   "for distribution column")));
+		}
+	}
+
+	return NULL;
+}
+
+
+/*
  * ErrorIfInsertNotMatchTargetDistributionColumn checks to see if MERGE is inserting a
  * value into the target which is not from the source table, if so, it
  * raises an exception.
@@ -1052,7 +1103,7 @@ ExtractMergeSourceRangeTableEntry(Query *query)
  */
 Var *
 ErrorIfInsertNotMatchTargetDistributionColumn(Oid targetRelationId,
-		Query *query, List *sourceJoinColumns)
+											  Query *query, List *sourceJoinColumns)
 {
 	/* function is void for pre-15 versions of Postgres */
 	#if PG_VERSION_NUM < PG_VERSION_15
@@ -1096,7 +1147,7 @@ ErrorIfInsertNotMatchTargetDistributionColumn(Oid targetRelationId,
 		}
 
 		Assert(action->commandType == CMD_INSERT);
-		Var *targetKey = PartitionColumn(targetRelationId, 1);
+		Var *targetDistributionKey = PartitionColumn(targetRelationId, 1);
 
 		TargetEntry *targetEntry = NULL;
 		foreach_ptr(targetEntry, action->targetList)
@@ -1104,20 +1155,14 @@ ErrorIfInsertNotMatchTargetDistributionColumn(Oid targetRelationId,
 			AttrNumber originalAttrNo = targetEntry->resno;
 
 			/* skip processing of target table non-distribution columns */
-			if (originalAttrNo != targetKey->varattno)
+			if (originalAttrNo != targetDistributionKey->varattno)
 			{
 				continue;
 			}
 
 			foundDistributionColumn = true;
 
-			/* Found a Var inserting into target's distribution column */
-			if (!IsA(targetEntry->expr, Var))
-			{
-				/* Inserting constant VALUES is not allowed */
-				ereport(ERROR, (errmsg("MERGE INSERT must refer a source column "
-									   "for distribution column")));
-			}
+			Var *insertVar = ErrorIfEntryExprNotSupported(targetEntry->expr);
 
 			/*
 			 * Check if the Var is appropriate to be inserted into distribution
@@ -1148,15 +1193,15 @@ ErrorIfInsertNotMatchTargetDistributionColumn(Oid targetRelationId,
 			Var *sourceJoinColumn = NULL;
 			foreach_ptr(sourceJoinColumn, sourceJoinColumns)
 			{
-				if (equal((Var *) targetEntry->expr, sourceJoinColumn))
+				if (equal(insertVar, sourceJoinColumn))
 				{
 					return sourceJoinColumn;
 				}
 			}
 
 			ereport(ERROR, (errmsg("MERGE INSERT must use the "
-						"source's joining column for "
-						"target's distribution column")));
+								   "source's joining column for "
+								   "target's distribution column")));
 		}
 
 		if (!foundDistributionColumn)

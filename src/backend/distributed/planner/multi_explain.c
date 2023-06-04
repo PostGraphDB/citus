@@ -245,9 +245,8 @@ NonPushableInsertSelectExplainScan(CustomScanState *node, List *ancestors,
 	 */
 	Query *queryCopy = copyObject(selectRte->subquery);
 
-	bool repartition = distributedPlan->modifyWithSelectMethod ==
-					   MODIFY_WITH_SELECT_REPARTITION;
-
+	bool repartition =
+		distributedPlan->modifyWithSelectMethod == MODIFY_WITH_SELECT_REPARTITION;
 
 	if (es->analyze)
 	{
@@ -304,7 +303,8 @@ NonPushableMergeCommandExplainScan(CustomScanState *node, List *ancestors,
 	 * https://github.com/citusdata/citus/issues/3947 for what can happen.
 	 */
 	Query *sourceQueryCopy = copyObject(sourceRte->subquery);
-	bool repartition = distributedPlan->modifyWithSelectMethod == MODIFY_WITH_SELECT_REPARTITION;
+	bool repartition =
+		distributedPlan->modifyWithSelectMethod == MODIFY_WITH_SELECT_REPARTITION;
 
 	if (es->analyze)
 	{

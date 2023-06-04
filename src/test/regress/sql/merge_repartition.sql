@@ -433,7 +433,7 @@ WHEN NOT MATCHED THEN
 
 SELECT compare_data();
 
--- Test source-query that requires repartitioning on of MERGE repartitioning
+-- Test source-query that requires repartitioning on top of MERGE repartitioning
 SELECT cleanup_data();
 SELECT setup_data();
 SELECT create_distributed_table('citus_target', 'id');

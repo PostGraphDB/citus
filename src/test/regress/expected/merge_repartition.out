@@ -999,7 +999,7 @@ SQL function "compare_data" statement 2
 
 (1 row)
 
--- Test source-query that requires repartitioning on of MERGE repartitioning
+-- Test source-query that requires repartitioning on top of MERGE repartitioning
 SELECT cleanup_data();
 NOTICE:  creating a new table for merge_repartition_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
