@@ -2956,13 +2956,13 @@ SELECT COUNT(*) FROM demo_distributed where id1 = 2;
 
 -- One row with Key=7 updated in demo_distributed to 150
 MERGE INTO demo_distributed t
-USING (SELECT count(DISTINCT id2) as key FROM demo_source_table GROUP BY val2) s
+USING (SELECT count(DISTINCT id2)::int4 as key FROM demo_source_table GROUP BY val2) s
 ON t.id1 = s.key
 WHEN NOT MATCHED THEN INSERT VALUES(s.key, 1)
 WHEN MATCHED THEN UPDATE SET val1 = 150;
 -- Seven rows with Key=2 inserted in demo_distributed
 MERGE INTO demo_distributed t
-USING (SELECT count(DISTINCT val2) + 1 as key FROM demo_source_table GROUP BY id2) s
+USING (SELECT (count(DISTINCT val2) + 1)::int4 as key FROM demo_source_table GROUP BY id2) s
 ON t.id1 = s.key
 WHEN NOT MATCHED THEN INSERT VALUES(s.key, 1)
 WHEN MATCHED THEN UPDATE SET val1 = 150;
@@ -3071,13 +3071,13 @@ USING citus_source s
 ON t.id = s.id
 WHEN NOT MATCHED THEN
   INSERT VALUES(10000);
-ERROR:  MERGE INSERT must refer a source column for distribution column
+ERROR:  MERGE INSERT is using unsupported expression type for distribution column
 MERGE INTO citus_target t
 USING citus_source s
 ON t.id = s.id
 WHEN NOT MATCHED THEN
   INSERT (id) VALUES(1000);
-ERROR:  MERGE INSERT must refer a source column for distribution column
+ERROR:  MERGE INSERT is using unsupported expression type for distribution column
 -- Colocated merge
 MERGE INTO t1 t
 USING s1 s
@@ -3258,8 +3258,8 @@ MERGE INTO t1
 		UPDATE SET val = t1.val + 1
 	WHEN NOT MATCHED THEN
 		INSERT (id, val) VALUES (s1_res.id, s1_res.val);
-ERROR:  Missing required join condition between source and target's distribution column
-HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
+ERROR:  Missing required join condition between target's distribution column and any expression originated from the source
+DETAIL:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 -- Join condition without target distribution column
 WITH s1_res AS (
      SELECT * FROM s1
@@ -3268,8 +3268,8 @@ WITH s1_res AS (
  WHEN MATCHED THEN DELETE
 	WHEN NOT MATCHED THEN
 		INSERT (id, val) VALUES (s1_res.id, s1_res.val);
-ERROR:  Missing required join condition between source and target's distribution column
-HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
+ERROR:  Missing required join condition between target's distribution column and any expression originated from the source
+DETAIL:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 --
 -- Reference tables
 --
@@ -3752,8 +3752,8 @@ DEBUG:  Creating MERGE repartition plan
 DEBUG:  Distributed planning for a fast-path router query
 DEBUG:  Creating router plan
 DEBUG:  Collect source query results on coordinator
-ERROR:  Missing required join condition between source and target's distribution column
-HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
+ERROR:  Missing required join condition between target's distribution column and any expression originated from the source
+DETAIL:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 MERGE INTO nullkey_c1_t1 USING nullkey_c2_t1 ON (nullkey_c1_t1.a = nullkey_c2_t1.a)
 WHEN MATCHED THEN UPDATE SET b = nullkey_c2_t1.b
 WHEN NOT MATCHED THEN INSERT VALUES (nullkey_c2_t1.a, nullkey_c2_t1.b);
@@ -3763,8 +3763,8 @@ DEBUG:  Creating MERGE repartition plan
 DEBUG:  Distributed planning for a fast-path router query
 DEBUG:  Creating router plan
 DEBUG:  Collect source query results on coordinator
-ERROR:  Missing required join condition between source and target's distribution column
-HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
+ERROR:  Missing required join condition between target's distribution column and any expression originated from the source
+DETAIL:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 -- with a distributed table
 MERGE INTO nullkey_c1_t1 USING distributed_table ON (nullkey_c1_t1.a = distributed_table.a)
 WHEN MATCHED THEN UPDATE SET b = distributed_table.b
@@ -3774,8 +3774,8 @@ DEBUG:  For MERGE command, all the distributed tables must be colocated
 DEBUG:  Creating MERGE repartition plan
 DEBUG:  Router planner cannot handle multi-shard select queries
 DEBUG:  Collect source query results on coordinator
-ERROR:  Missing required join condition between source and target's distribution column
-HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
+ERROR:  Missing required join condition between target's distribution column and any expression originated from the source
+DETAIL:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 MERGE INTO distributed_table USING nullkey_c1_t1 ON (nullkey_c1_t1.a = distributed_table.a)
 WHEN MATCHED THEN DELETE
 WHEN NOT MATCHED THEN INSERT VALUES (nullkey_c1_t1.a, nullkey_c1_t1.b);
@@ -3804,8 +3804,8 @@ DEBUG:  Creating MERGE repartition plan
 DEBUG:  Distributed planning for a fast-path router query
 DEBUG:  Creating router plan
 DEBUG:  Collect source query results on coordinator
-ERROR:  Missing required join condition between source and target's distribution column
-HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
+ERROR:  Missing required join condition between target's distribution column and any expression originated from the source
+DETAIL:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 MERGE INTO reference_table USING nullkey_c1_t1 ON (nullkey_c1_t1.a = reference_table.a)
 WHEN MATCHED THEN UPDATE SET b = nullkey_c1_t1.b
 WHEN NOT MATCHED THEN INSERT VALUES (nullkey_c1_t1.a, nullkey_c1_t1.b);
@@ -3819,8 +3819,8 @@ DEBUG:  Creating MERGE repartition plan
 DEBUG:  Distributed planning for a fast-path router query
 DEBUG:  Creating router plan
 DEBUG:  Collect source query results on coordinator
-ERROR:  Missing required join condition between source and target's distribution column
-HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
+ERROR:  Missing required join condition between target's distribution column and any expression originated from the source
+DETAIL:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 MERGE INTO citus_local_table USING nullkey_c1_t1 ON (nullkey_c1_t1.a = citus_local_table.a)
 WHEN MATCHED THEN DELETE;
 DEBUG:  A mix of distributed and local table, try repartitioning
@@ -3857,8 +3857,8 @@ DEBUG:  For MERGE command, all the distributed tables must be colocated
 DEBUG:  Creating MERGE repartition plan
 DEBUG:  Router planner cannot handle multi-shard select queries
 DEBUG:  Collect source query results on coordinator
-ERROR:  Missing required join condition between source and target's distribution column
-HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
+ERROR:  Missing required join condition between target's distribution column and any expression originated from the source
+DETAIL:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 WITH cte AS materialized (
     SELECT * FROM distributed_table
 )
@@ -3869,12 +3869,34 @@ DEBUG:  For MERGE command, all the distributed tables must be colocated
 DEBUG:  Creating MERGE repartition plan
 DEBUG:  Router planner cannot handle multi-shard select queries
 DEBUG:  Collect source query results on coordinator
-ERROR:  Missing required join condition between source and target's distribution column
-HINT:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
+ERROR:  Missing required join condition between target's distribution column and any expression originated from the source
+DETAIL:  Without a join condition on the target's distribution column, the source rows cannot be efficiently redistributed, and the NOT-MATCHED condition cannot be evaluated unambiguously. This can result in incorrect or unexpected results when attempting to merge tables in a distributed setting
 SET client_min_messages TO WARNING;
 DROP SCHEMA query_single_shard_table CASCADE;
-RESET client_min_messages;
 SET search_path TO merge_schema;
+-- Test Columnar table
+CREATE TABLE target_columnar(cid int, name text) USING columnar;
+SELECT create_distributed_table('target_columnar', 'cid');
+ create_distributed_table
+---------------------------------------------------------------------
+
+(1 row)
+
+MERGE INTO target_columnar t
+USING demo_source_table s
+ON t.cid = s.id2
+WHEN MATCHED THEN
+        UPDATE SET name = 'Columnar table updated by MERGE'
+WHEN NOT MATCHED THEN
+	DO NOTHING;
+ERROR:  Columnar tables are not yet supported in MERGE
+MERGE INTO demo_distributed t
+USING target_columnar s
+ON t.id1 = s.cid
+WHEN NOT MATCHED THEN
+	DO NOTHING;
+ERROR:  Columnar tables are not yet supported in MERGE
+RESET client_min_messages;
 DROP SERVER foreign_server CASCADE;
 NOTICE:  drop cascades to 3 other objects
 DETAIL:  drop cascades to user mapping for postgres on server foreign_server
@@ -3885,7 +3907,7 @@ CONTEXT:  SQL statement "SELECT citus_drop_all_shards(v_obj.objid, v_obj.schema_
 PL/pgSQL function citus_drop_trigger() line XX at PERFORM
 DROP FUNCTION merge_when_and_write();
 DROP SCHEMA merge_schema CASCADE;
-NOTICE:  drop cascades to 95 other objects
+NOTICE:  drop cascades to 96 other objects
 DETAIL:  drop cascades to function insert_data()
 drop cascades to table local_local
 drop cascades to table target
@@ -3981,3 +4003,4 @@ drop cascades to table s1
 drop cascades to table dist_target
 drop cascades to table dist_source
 drop cascades to view show_tables
+drop cascades to table target_columnar

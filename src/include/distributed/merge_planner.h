@@ -29,9 +29,7 @@ extern bool IsLocalTableModification(Oid targetRelationId, Query *query,
 									 RTEListProperties *rteProperties);
 extern void NonPushableMergeCommandExplainScan(CustomScanState *node, List *ancestors,
 											   struct ExplainState *es);
-extern Var * ErrorIfInsertNotMatchTargetDistributionColumn(Oid targetRelationId,
-														   Query *query,
-														   List *sourceJoinColumns);
+extern Var * FetchAndValidateInsertVarIfExists(Oid targetRelationId, Query *query);
 extern RangeTblEntry * ExtractMergeSourceRangeTableEntry(Query *query);
 
 

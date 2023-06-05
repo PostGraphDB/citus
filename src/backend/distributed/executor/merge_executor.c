@@ -192,7 +192,7 @@ ExecuteSourceAtWorkerAndRepartition(CitusScanState *scanState)
 		CreateTupleStoreTupleDest(scanState->tuplestorestate,
 								  tupleDescriptor);
 	uint64 rowsMerged =
-		ExecuteTaskListIntoTupleDest(ROW_MODIFY_COMMUTATIVE, taskList,
+		ExecuteTaskListIntoTupleDest(ROW_MODIFY_NONCOMMUTATIVE, taskList,
 									 tupleDest,
 									 hasReturning);
 	executorState->es_processed = rowsMerged;
@@ -286,7 +286,7 @@ ExecuteSourceAtCoordAndRedistribution(CitusScanState *scanState)
 	TupleDestination *tupleDest =
 		CreateTupleStoreTupleDest(scanState->tuplestorestate, tupleDescriptor);
 	uint64 rowsMerged =
-		ExecuteTaskListIntoTupleDest(ROW_MODIFY_COMMUTATIVE, prunedTaskList,
+		ExecuteTaskListIntoTupleDest(ROW_MODIFY_NONCOMMUTATIVE, prunedTaskList,
 									 tupleDest, hasReturning);
 	executorState->es_processed = rowsMerged;
 }
@@ -302,78 +302,85 @@ static int
 sourceResultPartitionColumnIndex(Query *mergeQuery, List *sourceTargetList,
 								 CitusTableCacheEntry *targetRelation)
 {
-	/* Get all the equal(=) expressions from the ON clause */
-	List *mergeJoinConditionList = QualifierList(mergeQuery->jointree);
+	/* Get all the Join conditions from the ON clause */
+	List *mergeJoinConditionList = WhereClauseList(mergeQuery->jointree);
 
-	/*
-	 * Now that we have gathered all the _equal_ expressions in the list, we proceed
-	 * to match the one that joins with the distribution column of the target.
-	 */
 	Var *targetColumn = targetRelation->partitionColumn;
-	List *sourceJoinColumns = NIL;
-	Node *joinClause = NULL;
-	foreach_ptr(joinClause, mergeJoinConditionList)
-	{
-		Node *leftOperand;
-		Node *rightOperand;
+	bool joinedOnInsertColumn = false;
+	Var *sourceRepartitionVar = NULL;
 
-		if (!BinaryOpExpression((Expr *) joinClause, &leftOperand, &rightOperand))
-		{
-			continue;
-		}
-
-		if (equal(leftOperand, targetColumn) && IsA(rightOperand, Var))
-		{
-			sourceJoinColumns = lappend(sourceJoinColumns, rightOperand);
-		}
-		else if (equal(rightOperand, targetColumn) && IsA(leftOperand, Var))
-		{
-			sourceJoinColumns = lappend(sourceJoinColumns, leftOperand);
-		}
-	}
-
-	int partitionColumnIndex = -1;
-	if (sourceJoinColumns)
-	{
-		/* Use the Var that's being used in INSERT clause */
-		Var *sourceJoinColumn =
-			ErrorIfInsertNotMatchTargetDistributionColumn(
-				targetRelation->relationId, mergeQuery,
-				sourceJoinColumns);
-
-		/* If no INSERT action is present, we can use one of the Var */
-		if (!sourceJoinColumn)
-		{
-			sourceJoinColumn = linitial(sourceJoinColumns);
-		}
-
-		/*
-		 * Find the index in the source list that will be utilized
-		 * for colocation-redistribution.
-		 */
-		partitionColumnIndex =
-			DistributionColumnIndex(sourceTargetList, sourceJoinColumn);
-	}
-
-	if (partitionColumnIndex == -1)
+	OpExpr *validJoinClause =
+		SinglePartitionJoinClause(list_make1(targetColumn), mergeJoinConditionList);
+	if (!validJoinClause)
 	{
 		ereport(ERROR, (errmsg("Missing required join condition between "
-							   "source and target's distribution column"),
-						errhint("Without a join condition on the target's "
-								"distribution column, the source rows "
-								"cannot be efficiently redistributed, and "
-								"the NOT-MATCHED condition cannot be evaluated "
-								"unambiguously. This can result in incorrect or "
-								"unexpected results when attempting to merge "
-								"tables in a distributed setting")));
+							   "target's distribution column and any "
+							   "expression originated from the source"),
+						errdetail("Without a join condition on the target's "
+								  "distribution column, the source rows "
+								  "cannot be efficiently redistributed, and "
+								  "the NOT-MATCHED condition cannot be evaluated "
+								  "unambiguously. This can result in incorrect or "
+								  "unexpected results when attempting to merge "
+								  "tables in a distributed setting")));
+	}
+
+	Var *insertVar =
+		FetchAndValidateInsertVarIfExists(targetRelation->relationId, mergeQuery);
+	if (insertVar)
+	{
+		/* INSERT action, choose joining column for inserted value */
+		joinedOnInsertColumn =
+			JoinOnColumns(list_make1(targetColumn), insertVar, mergeJoinConditionList);
+		if (joinedOnInsertColumn)
+		{
+			sourceRepartitionVar = insertVar;
+		}
+		else
+		{
+			ereport(ERROR, (errmsg("MERGE INSERT must use the "
+								   "source's joining column for "
+								   "target's distribution column")));
+		}
+	}
+	else
+	{
+		/* No INSERT action, choose any joining column for repartitioning */
+
+		/* both are verified in SinglePartitionJoinClause to not be NULL, assert is to guard */
+		Var *leftColumn = LeftColumnOrNULL(validJoinClause);
+		Var *rightColumn = RightColumnOrNULL(validJoinClause);
+
+		Assert(leftColumn != NULL);
+		Assert(rightColumn != NULL);
+
+		if (equal(targetColumn, leftColumn))
+		{
+			sourceRepartitionVar = rightColumn;
+		}
+		else if (equal(targetColumn, rightColumn))
+		{
+			sourceRepartitionVar = leftColumn;
+		}
+	}
+
+	Assert(sourceRepartitionVar);
+
+	int sourceResultRepartitionColumnIndex =
+		DistributionColumnIndex(sourceTargetList, sourceRepartitionVar);
+
+	if (sourceResultRepartitionColumnIndex == -1)
+	{
+		ereport(ERROR,
+				(errmsg("Unexpected column index of the source list")));
 	}
 	else
 	{
 		ereport(DEBUG1, (errmsg("Using column - index:%d from the source list "
-								"to redistribute", partitionColumnIndex)));
+								"to redistribute", sourceResultRepartitionColumnIndex)));
 	}
 
-	return partitionColumnIndex;
+	return sourceResultRepartitionColumnIndex;
 }
 
 
@@ -410,7 +417,7 @@ ExecuteMergeSourcePlanIntoColocatedIntermediateResults(Oid targetRelationId,
 																  intermediateResultIdPrefix,
 																  publishableData);
 
-	/* We can skip when wiring intermediate files */
+	/* We can skip when writing to intermediate files */
 	copyDest->skipCoercions = true;
 
 	ExecutePlanIntoDestReceiver(sourcePlan, paramListInfo, (DestReceiver *) copyDest);

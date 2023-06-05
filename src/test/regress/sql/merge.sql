@@ -1840,14 +1840,14 @@ SELECT COUNT(*) FROM demo_distributed where id1 = 2;
 
 -- One row with Key=7 updated in demo_distributed to 150
 MERGE INTO demo_distributed t
-USING (SELECT count(DISTINCT id2) as key FROM demo_source_table GROUP BY val2) s
+USING (SELECT count(DISTINCT id2)::int4 as key FROM demo_source_table GROUP BY val2) s
 ON t.id1 = s.key
 WHEN NOT MATCHED THEN INSERT VALUES(s.key, 1)
 WHEN MATCHED THEN UPDATE SET val1 = 150;
 
 -- Seven rows with Key=2 inserted in demo_distributed
 MERGE INTO demo_distributed t
-USING (SELECT count(DISTINCT val2) + 1 as key FROM demo_source_table GROUP BY id2) s
+USING (SELECT (count(DISTINCT val2) + 1)::int4 as key FROM demo_source_table GROUP BY id2) s
 ON t.id1 = s.key
 WHEN NOT MATCHED THEN INSERT VALUES(s.key, 1)
 WHEN MATCHED THEN UPDATE SET val1 = 150;
@@ -1858,6 +1858,7 @@ SELECT COUNT(*) FROM demo_distributed where id1 = 2;
 --
 -- Error and Unsupported scenarios
 --
+
 
 -- Test explain analyze with repartition
 EXPLAIN ANALYZE
@@ -2378,9 +2379,26 @@ WHEN MATCHED THEN UPDATE SET b = cte.b;
 SET client_min_messages TO WARNING;
 DROP SCHEMA query_single_shard_table CASCADE;
 
-RESET client_min_messages;
 SET search_path TO merge_schema;
 
+-- Test Columnar table
+CREATE TABLE target_columnar(cid int, name text) USING columnar;
+SELECT create_distributed_table('target_columnar', 'cid');
+MERGE INTO target_columnar t
+USING demo_source_table s
+ON t.cid = s.id2
+WHEN MATCHED THEN
+        UPDATE SET name = 'Columnar table updated by MERGE'
+WHEN NOT MATCHED THEN
+	DO NOTHING;
+
+MERGE INTO demo_distributed t
+USING target_columnar s
+ON t.id1 = s.cid
+WHEN NOT MATCHED THEN
+	DO NOTHING;
+
+RESET client_min_messages;
 DROP SERVER foreign_server CASCADE;
 DROP FUNCTION merge_when_and_write();
 DROP SCHEMA merge_schema CASCADE;

@@ -1401,7 +1401,8 @@ CreateNonPushableInsertSelectPlan(uint64 planId, Query *parse, ParamListInfo bou
 	PlannedStmt *selectPlan = pg_plan_query(selectQueryCopy, NULL, cursorOptions,
 											boundParams);
 
-	bool repartitioned = IsRedistributablePlan(selectPlan->planTree, targetRelationId);
+	bool repartitioned = IsRedistributablePlan(selectPlan->planTree) &&
+						 IsSupportedRedistributionTarget(targetRelationId);
 
 	/*
 	 * It's not possible to generate a distributed plan for a SELECT

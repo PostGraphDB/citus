@@ -32,10 +32,11 @@
 #include "distributed/query_pushdown_planning.h"
 #include "distributed/query_colocation_checker.h"
 #include "distributed/repartition_executor.h"
+#include "distributed/shared_library_init.h"
 
 #if PG_VERSION_NUM >= PG_VERSION_15
 
-static Var * ErrorIfEntryExprNotSupported(Expr *entryExpr);
+static Var * ValidateAndReturnVarIfSupported(Expr *entryExpr);
 static void ErrorIfMergeQueryQualAndTargetListNotSupported(Oid targetRelationId,
 														   Query *originalQuery);
 static void ErrorIfMergeNotSupported(Query *query, Oid targetRelationId,
@@ -165,7 +166,14 @@ CreateRouterMergePlan(Oid targetRelationId, Query *originalQuery, Query *query,
 		return distributedPlan;
 	}
 
-	ErrorIfInsertNotMatchTargetDistributionColumn(targetRelationId, originalQuery, NULL);
+	Var *insertVar =
+		FetchAndValidateInsertVarIfExists(targetRelationId, originalQuery);
+	if (insertVar &&
+		!IsDistributionColumnInMergeSource((Expr *) insertVar, originalQuery, true))
+	{
+		ereport(ERROR, (errmsg("MERGE INSERT must use the source table "
+							   "distribution column value")));
+	}
 
 	Job *job = RouterJob(originalQuery, plannerRestrictionContext,
 						 &distributedPlan->planningError);
@@ -223,9 +231,11 @@ CreateRepartitionMergePlan(Oid targetRelationId, uint64 planId, Query *originalQ
 	int cursorOptions = CURSOR_OPT_PARALLEL_OK;
 	PlannedStmt *sourceRowsPlan = pg_plan_query(sourceQueryCopy, NULL, cursorOptions,
 												boundParams);
+	bool repartitioned = IsRedistributablePlan(sourceRowsPlan->planTree) &&
+						 IsSupportedRedistributionTarget(targetRelationId);
 
 	/* If plan is distributed, no work at the coordinator */
-	if (IsRedistributablePlan(sourceRowsPlan->planTree, targetRelationId))
+	if (repartitioned)
 	{
 		distributedPlan->modifyWithSelectMethod = MODIFY_WITH_SELECT_REPARTITION;
 	}
@@ -412,6 +422,14 @@ ErrorIfMergeHasUnsupportedTables(Oid targetRelationId, List *rangeTableList)
 		/*
 		 * Check for unsupported distributed tables
 		 */
+		if (extern_IsColumnarTableAmTable(relationId))
+		{
+			/* Columnar tables are not supported */
+			ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							errmsg("Columnar tables are not "
+								   "yet supported in MERGE")));
+		}
+
 		if (IsCitusTableType(relationId, DISTRIBUTED_TABLE))
 		{
 			/* Append/Range distributed tables are not supported */
@@ -992,6 +1010,49 @@ MergeCommandResultIdPrefix(uint64 planId)
 }
 
 
+/*
+ * ValidateAndReturnVarIfSupported Checks for valid expressions of type Var, and
+ * returns the Var if it finds one, for everything else, raises an exception.
+ */
+static Var *
+ValidateAndReturnVarIfSupported(Expr *entryExpr)
+{
+	switch (entryExpr->type)
+	{
+		case T_Var:
+		{
+			/* Found a Var inserting into target's distribution column */
+			return (Var *) entryExpr;
+		}
+
+		case T_Const:
+		{
+			/* Inserting constant VALUES is not allowed */
+		}
+
+		case T_FuncExpr:
+		{
+			FuncExpr *funcExpr = (FuncExpr *) entryExpr;
+
+			if (funcExpr->funcformat == COERCE_IMPLICIT_CAST &&
+				list_length(funcExpr->args) == 1 &&
+				IsA(linitial(funcExpr->args), Var))
+			{
+				return (Var *) linitial(funcExpr->args);
+			}
+		}
+
+		/* fall through */
+		default:
+		{
+			ereport(ERROR, (errmsg("MERGE INSERT is using unsupported expression type "
+								   "for distribution column")));
+		}
+	}
+	return NULL;
+}
+
+
 #endif
 
 
@@ -1044,66 +1105,17 @@ ExtractMergeSourceRangeTableEntry(Query *query)
 
 
 /*
- * ErrorIfEntryExprNotSupported Checks for valid expressions of type Var, and
- * returns the Var if it finds one, for evrything else, raises an exception.
- */
-static Var *
-ErrorIfEntryExprNotSupported(Expr *entryExpr)
-{
-	switch (entryExpr->type)
-	{
-		case T_Var:
-		{
-			/* Found a Var inserting into target's distribution column */
-			return (Var *) entryExpr;
-		}
-
-		case T_Const:
-		{
-			/* Inserting constant VALUES is not allowed */
-			ereport(ERROR, (errmsg("MERGE INSERT must refer a source column "
-								   "for distribution column")));
-			break;
-		}
-
-		case T_FuncExpr:
-		{
-			FuncExpr *funcExpr = (FuncExpr *) entryExpr;
-
-			if (funcExpr->funcformat == COERCE_IMPLICIT_CAST &&
-				list_length(funcExpr->args) == 1 &&
-				IsA(linitial(funcExpr->args), Var))
-			{
-				return (Var *) linitial(funcExpr->args);
-			}
-
-			ereport(ERROR, (errmsg("MERGE INSERT is using a function call "
-								   "for distribution column")));
-			break;
-		}
-
-		default:
-		{
-			ereport(ERROR, (errmsg("MERGE INSERT is using an incorrect value "
-								   "for distribution column")));
-		}
-	}
-
-	return NULL;
-}
-
-
-/*
- * ErrorIfInsertNotMatchTargetDistributionColumn checks to see if MERGE is inserting a
+ * FetchAndValidateInsertVarIfExists checks to see if MERGE is inserting a
  * value into the target which is not from the source table, if so, it
- * raises an exception.
+ * raises an exception. The return value is the Var that's being inserted
+ * into the target's distribution column, If no INSERT action exist, it
+ * simply returns a NULL.
  * Note: Inserting random values other than the joined column values will
  * result in unexpected behaviour of rows ending up in incorrect shards, to
  * prevent such mishaps, we disallow such inserts here.
  */
 Var *
-ErrorIfInsertNotMatchTargetDistributionColumn(Oid targetRelationId,
-											  Query *query, List *sourceJoinColumns)
+FetchAndValidateInsertVarIfExists(Oid targetRelationId, Query *query)
 {
 	/* function is void for pre-15 versions of Postgres */
 	#if PG_VERSION_NUM < PG_VERSION_15
@@ -1162,46 +1174,7 @@ ErrorIfInsertNotMatchTargetDistributionColumn(Oid targetRelationId,
 
 			foundDistributionColumn = true;
 
-			Var *insertVar = ErrorIfEntryExprNotSupported(targetEntry->expr);
-
-			/*
-			 * Check if the Var is appropriate to be inserted into distribution
-			 * column of the target. If sourceJoinColumn is empty, it's assumed
-			 * a colocated router merge.
-			 */
-
-			/*
-			 * Source and target are colocated and joined on their respective
-			 * distribution columns, we *must* insert source's distribution id
-			 */
-			if (sourceJoinColumns == NIL)
-			{
-				if (!IsDistributionColumnInMergeSource(targetEntry->expr, query, true))
-				{
-					ereport(ERROR, (errmsg("MERGE INSERT must use the source table "
-										   "distribution column value")));
-				}
-
-				return NULL;
-			}
-
-			/*
-			 * Source and target are non-colocated, source is being
-			 * is repartitioned and redistributed on the Join-column
-			 * with the target, we *must* insert this id value only.
-			 */
-			Var *sourceJoinColumn = NULL;
-			foreach_ptr(sourceJoinColumn, sourceJoinColumns)
-			{
-				if (equal(insertVar, sourceJoinColumn))
-				{
-					return sourceJoinColumn;
-				}
-			}
-
-			ereport(ERROR, (errmsg("MERGE INSERT must use the "
-								   "source's joining column for "
-								   "target's distribution column")));
+			return ValidateAndReturnVarIfSupported(targetEntry->expr);
 		}
 
 		if (!foundDistributionColumn)
