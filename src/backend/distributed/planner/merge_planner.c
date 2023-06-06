@@ -36,6 +36,9 @@
 
 #if PG_VERSION_NUM >= PG_VERSION_15
 
+static int sourceResultPartitionColumnIndex(Query *mergeQuery,
+											List *sourceTargetList,
+											CitusTableCacheEntry *targetRelation);
 static Var * ValidateAndReturnVarIfSupported(Expr *entryExpr);
 static void ErrorIfMergeQueryQualAndTargetListNotSupported(Oid targetRelationId,
 														   Query *originalQuery);
@@ -51,7 +54,7 @@ static DeferredErrorMessage * DeferErrorIfRoutableMergeNotSupported(Query *query
 																	plannerRestrictionContext);
 static DeferredErrorMessage * MergeQualAndTargetListFunctionsSupported(Oid
 																	   resultRelationId,
-																	   FromExpr *joinTree,
+																	   Query *query,
 																	   Node *quals,
 																	   List *targetList,
 																	   CmdType commandType);
@@ -67,6 +70,7 @@ static void ConvertSourceRTEIntoSubquery(Query *mergeQuery,
 										 RangeTblEntry *sourceRte,
 										 PlannerRestrictionContext *
 										 plannerRestrictionContext);
+static void ConvertSubqueryRTEIntoSubquery(Query *mergeQuery, RangeTblEntry *sourceRte);
 static void ConvertCteRTEIntoSubquery(Query *mergeQuery, RangeTblEntry *sourceRte);
 static void ConvertRelationRTEIntoSubquery(Query *mergeQuery,
 										   RangeTblEntry *sourceRte,
@@ -145,7 +149,7 @@ CreateMergePlan(uint64 planId, Query *originalQuery, Query *query,
 
 /*
  * CreateRouterMergePlan attempts to create a pushable plan for the given MERGE
- * SQL statement. If planning fails ->planningError is set to a description
+ * SQL statement. If the planning fails, the ->planningError is set to a description
  * of the failure.
  */
 static DistributedPlan *
@@ -202,7 +206,20 @@ CreateRouterMergePlan(Oid targetRelationId, Query *originalQuery, Query *query,
 
 
 /*
- * CreateRepartitionMergePlan
+ * CreateRepartitionMergePlan comes into effect if the router planning fails
+ * and incorporates two planning strategies.
+ *
+ * ExecuteSourceAtWorkerAndRepartition(): Plan the source query independently,
+ * execute the results into intermediate files, and repartition the files to
+ * co-locate them with the merge-target table. Subsequently, compile a final
+ * merge query on the target table using the intermediate results as the data
+ * source.
+ *
+ * ExecuteSourceAtCoordAndRedistribution(): Execute the plan that requires
+ * evaluation at the coordinator, run the query on the coordinator, and
+ * redistribute the resulting rows to ensure colocation with the target shards.
+ * Direct the MERGE SQL operation to the worker nodes' target shards, using the
+ * intermediate files colocated with the data as the data source.
  */
 static DistributedPlan *
 CreateRepartitionMergePlan(Oid targetRelationId, uint64 planId, Query *originalQuery,
@@ -214,12 +231,22 @@ CreateRepartitionMergePlan(Oid targetRelationId, uint64 planId, Query *originalQ
 	RangeTblEntry *sourceRte = ExtractMergeSourceRangeTableEntry(mergeQuery);
 	DistributedPlan *distributedPlan = CitusMakeNode(DistributedPlan);
 
-
 	ereport(DEBUG1, (errmsg("Creating MERGE repartition plan")));
 	ConvertSourceRTEIntoSubquery(mergeQuery, sourceRte, plannerRestrictionContext);
 	Query *sourceQuery = sourceRte->subquery;
 
 	ErrorIfRepartitionMergeNotSupported(targetRelationId, mergeQuery, sourceQuery);
+
+	CitusTableCacheEntry *targetRelation = GetCitusTableCacheEntry(targetRelationId);
+
+	/*
+	 * Get the index of the column in the source query that will be utilized
+	 * to repartition the source rows, ensuring colocation with the target
+	 */
+	distributedPlan->sourceResultRepartitionColumnIndex =
+		sourceResultPartitionColumnIndex(mergeQuery,
+										 sourceQuery->targetList,
+										 targetRelation);
 
 	/*
 	 * Make a copy of the source query, since following code scribbles it
@@ -510,15 +537,16 @@ IsDistributionColumnInMergeSource(Expr *columnExpression, Query *query, bool
  * are allowed, if we are updating distribution column, etc.
  */
 static DeferredErrorMessage *
-MergeQualAndTargetListFunctionsSupported(Oid resultRelationId, FromExpr *joinTree,
+MergeQualAndTargetListFunctionsSupported(Oid resultRelationId, Query *query,
 										 Node *quals,
 										 List *targetList, CmdType commandType)
 {
-	uint32 rangeTableId = 1;
+	uint32 targetRangeTableIndex = query->resultRelation;
+	FromExpr *joinTree = query->jointree;
 	Var *distributionColumn = NULL;
 	if (IsCitusTable(resultRelationId) && HasDistributionKey(resultRelationId))
 	{
-		distributionColumn = PartitionColumn(resultRelationId, rangeTableId);
+		distributionColumn = PartitionColumn(resultRelationId, targetRangeTableIndex);
 	}
 
 	ListCell *targetEntryCell = NULL;
@@ -789,6 +817,25 @@ ConvertRelationRTEIntoSubquery(Query *mergeQuery, RangeTblEntry *sourceRte,
 
 
 /*
+ * ConvertSubqueryRTEIntoSubquery takes a RTE_SUBQUERY and wraps it into a subquery, which
+ * eliminates any resjunk columns and adjusts the CTE levelsup
+ */
+static void
+ConvertSubqueryRTEIntoSubquery(Query *mergeQuery, RangeTblEntry *sourceRte)
+{
+	sourceRte->subquery = WrapSubquery(sourceRte->subquery);
+
+	if (list_length(mergeQuery->cteList) > 0)
+	{
+		/* copy CTEs from the MERGE ... INTO statement into source subquery */
+		sourceRte->subquery->cteList = copyObject(mergeQuery->cteList);
+		sourceRte->subquery->hasModifyingCTE = mergeQuery->hasModifyingCTE;
+		mergeQuery->cteList = NIL;
+	}
+}
+
+
+/*
  * ConvertSourceRTEIntoSubquery converts MERGE's source RTE into a subquery,
  * whose result rows are repartitioned during runtime.
  */
@@ -800,7 +847,7 @@ ConvertSourceRTEIntoSubquery(Query *mergeQuery, RangeTblEntry *sourceRte,
 	{
 		case RTE_SUBQUERY:
 		{
-			sourceRte->subquery = WrapSubquery(sourceRte->subquery);
+			ConvertSubqueryRTEIntoSubquery(mergeQuery, sourceRte);
 			return;
 		}
 
@@ -819,8 +866,10 @@ ConvertSourceRTEIntoSubquery(Query *mergeQuery, RangeTblEntry *sourceRte,
 
 		default:
 		{
-			ereport(ERROR, (errmsg("Unexpected source relation type(rtekind:%d)",
-								   sourceRte->rtekind)));
+			ereport(ERROR, (errmsg("Currently, Citus only supports "
+								   "table, subquery, and CTEs as "
+								   "valid sources for the MERGE "
+								   "operation")));
 		}
 	}
 }
@@ -965,7 +1014,7 @@ ErrorIfMergeQueryQualAndTargetListNotSupported(Oid targetRelationId, Query *orig
 
 	DeferredErrorMessage *deferredError =
 		MergeQualAndTargetListFunctionsSupported(targetRelationId,
-												 originalQuery->jointree,
+												 originalQuery,
 												 originalQuery->jointree->quals,
 												 originalQuery->targetList,
 												 originalQuery->commandType);
@@ -984,7 +1033,7 @@ ErrorIfMergeQueryQualAndTargetListNotSupported(Oid targetRelationId, Query *orig
 	{
 		Assert(originalQuery->returningList == NULL);
 		deferredError = MergeQualAndTargetListFunctionsSupported(targetRelationId,
-																 originalQuery->jointree,
+																 originalQuery,
 																 action->qual,
 																 action->targetList,
 																 action->commandType);
@@ -1050,6 +1099,101 @@ ValidateAndReturnVarIfSupported(Expr *entryExpr)
 		}
 	}
 	return NULL;
+}
+
+
+/*
+ * sourceResultPartitionColumnIndex collects all Join conditions from the
+ * ON clause and verifies if there is a join, either left or right, with
+ * the distribution column of the given target. Once a match is found, it
+ * returns the index of that match in the source's target list.
+ */
+static int
+sourceResultPartitionColumnIndex(Query *mergeQuery, List *sourceTargetList,
+								 CitusTableCacheEntry *targetRelation)
+{
+	/* Get all the Join conditions from the ON clause */
+	List *mergeJoinConditionList = WhereClauseList(mergeQuery->jointree);
+	Var *targetColumn = targetRelation->partitionColumn;
+	Var *sourceRepartitionVar = NULL;
+
+	OpExpr *validJoinClause =
+		SinglePartitionJoinClause(list_make1(targetColumn), mergeJoinConditionList);
+	if (!validJoinClause)
+	{
+		ereport(ERROR, (errmsg("The required join operation is missing between "
+							   "the target's distribution column and any "
+							   "expression originating from the source. The "
+							   "issue may arise from either a non-equi-join or "
+							   "a mismatch in the datatypes of the columns being "
+							   "joined."),
+						errdetail("Without a equi-join condition on the target's "
+								  "distribution column, the source rows "
+								  "cannot be efficiently redistributed, and "
+								  "the NOT-MATCHED condition cannot be evaluated "
+								  "unambiguously. This can result in incorrect or "
+								  "unexpected results when attempting to merge "
+								  "tables in a distributed setting")));
+	}
+
+	Var *insertVar =
+		FetchAndValidateInsertVarIfExists(targetRelation->relationId, mergeQuery);
+	if (insertVar)
+	{
+		/* INSERT action, choose joining column for inserted value */
+		bool joinedOnInsertColumn = false;
+
+		joinedOnInsertColumn =
+			JoinOnColumns(list_make1(targetColumn), insertVar, mergeJoinConditionList);
+		if (joinedOnInsertColumn)
+		{
+			sourceRepartitionVar = insertVar;
+		}
+		else
+		{
+			ereport(ERROR, (errmsg("MERGE INSERT must use the "
+								   "source's joining column for "
+								   "target's distribution column")));
+		}
+	}
+	else
+	{
+		/* No INSERT action, choose any joining column for repartitioning */
+
+		/* both are verified in SinglePartitionJoinClause to not be NULL, assert is to guard */
+		Var *leftColumn = LeftColumnOrNULL(validJoinClause);
+		Var *rightColumn = RightColumnOrNULL(validJoinClause);
+
+		Assert(leftColumn != NULL);
+		Assert(rightColumn != NULL);
+
+		if (equal(targetColumn, leftColumn))
+		{
+			sourceRepartitionVar = rightColumn;
+		}
+		else if (equal(targetColumn, rightColumn))
+		{
+			sourceRepartitionVar = leftColumn;
+		}
+	}
+
+	Assert(sourceRepartitionVar);
+
+	int sourceResultRepartitionColumnIndex =
+		DistributionColumnIndex(sourceTargetList, sourceRepartitionVar);
+
+	if (sourceResultRepartitionColumnIndex == -1)
+	{
+		ereport(ERROR,
+				(errmsg("Unexpected column index of the source list")));
+	}
+	else
+	{
+		ereport(DEBUG1, (errmsg("Using column - index:%d from the source list "
+								"to redistribute", sourceResultRepartitionColumnIndex)));
+	}
+
+	return sourceResultRepartitionColumnIndex;
 }
 
 
@@ -1138,6 +1282,7 @@ FetchAndValidateInsertVarIfExists(Oid targetRelationId, Query *query)
 
 	bool foundDistributionColumn = false;
 	MergeAction *action = NULL;
+	uint32 targetRangeTableIndex = query->resultRelation;
 	foreach_ptr(action, query->mergeActionList)
 	{
 		/* Skip MATCHED clause as INSERTS are not allowed in it */
@@ -1159,7 +1304,8 @@ FetchAndValidateInsertVarIfExists(Oid targetRelationId, Query *query)
 		}
 
 		Assert(action->commandType == CMD_INSERT);
-		Var *targetDistributionKey = PartitionColumn(targetRelationId, 1);
+		Var *targetDistributionKey =
+			PartitionColumn(targetRelationId, targetRangeTableIndex);
 
 		TargetEntry *targetEntry = NULL;
 		foreach_ptr(targetEntry, action->targetList)

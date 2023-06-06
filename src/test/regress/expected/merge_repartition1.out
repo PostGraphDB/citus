@@ -10,10 +10,10 @@ SELECT substring(:'server_version', '\d+')::int >= 15 AS server_version_ge_15
 -- and compare the final results of the target tables in Postgres and Citus.
 -- The results should match. This process is repeated for various combinations
 -- of MERGE SQL.
-DROP SCHEMA IF EXISTS merge_repartition_schema CASCADE;
-NOTICE:  schema "merge_repartition_schema" does not exist, skipping
-CREATE SCHEMA merge_repartition_schema;
-SET search_path TO merge_repartition_schema;
+DROP SCHEMA IF EXISTS merge_repartition1_schema CASCADE;
+NOTICE:  schema "merge_repartition1_schema" does not exist, skipping
+CREATE SCHEMA merge_repartition1_schema;
+SET search_path TO merge_repartition1_schema;
 SET citus.shard_count TO 4;
 SET citus.next_shard_id TO 5000000;
 SET citus.explain_all_tasks TO true;
@@ -92,21 +92,21 @@ LANGUAGE SQL;
 -- Target and source are distributed, and non-colocated
 --
 SELECT cleanup_data();
-NOTICE:  creating a new table for merge_repartition_schema.citus_target
+NOTICE:  creating a new table for merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  moving the data of merge_repartition_schema.citus_target
+NOTICE:  moving the data of merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  dropping the old merge_repartition_schema.citus_target
+NOTICE:  dropping the old merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  renaming the new table to merge_repartition_schema.citus_target
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  creating a new table for merge_repartition_schema.citus_source
+NOTICE:  creating a new table for merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  moving the data of merge_repartition_schema.citus_source
+NOTICE:  moving the data of merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  dropping the old merge_repartition_schema.citus_source
+NOTICE:  dropping the old merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  renaming the new table to merge_repartition_schema.citus_source
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
  cleanup_data
 ---------------------------------------------------------------------
@@ -123,7 +123,7 @@ SELECT create_distributed_table('citus_target', 'id');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_target$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_target$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -133,7 +133,7 @@ SELECT create_distributed_table('citus_source', 'id', colocate_with=>'none');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_source$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_source$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -173,21 +173,21 @@ SQL function "compare_data" statement 2
 -- Target and source are distributed, and colocated but not joined on distribution column
 --
 SELECT cleanup_data();
-NOTICE:  creating a new table for merge_repartition_schema.citus_target
+NOTICE:  creating a new table for merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  moving the data of merge_repartition_schema.citus_target
+NOTICE:  moving the data of merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  dropping the old merge_repartition_schema.citus_target
+NOTICE:  dropping the old merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  renaming the new table to merge_repartition_schema.citus_target
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  creating a new table for merge_repartition_schema.citus_source
+NOTICE:  creating a new table for merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  moving the data of merge_repartition_schema.citus_source
+NOTICE:  moving the data of merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  dropping the old merge_repartition_schema.citus_source
+NOTICE:  dropping the old merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  renaming the new table to merge_repartition_schema.citus_source
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
  cleanup_data
 ---------------------------------------------------------------------
@@ -204,7 +204,7 @@ SELECT create_distributed_table('citus_target', 'id');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_target$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_target$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -214,7 +214,7 @@ SELECT create_distributed_table('citus_source', 'id', colocate_with=>'citus_targ
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_source$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_source$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -255,21 +255,21 @@ SQL function "compare_data" statement 2
 -- but with nondistribution values
 --
 SELECT cleanup_data();
-NOTICE:  creating a new table for merge_repartition_schema.citus_target
+NOTICE:  creating a new table for merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  moving the data of merge_repartition_schema.citus_target
+NOTICE:  moving the data of merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  dropping the old merge_repartition_schema.citus_target
+NOTICE:  dropping the old merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  renaming the new table to merge_repartition_schema.citus_target
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  creating a new table for merge_repartition_schema.citus_source
+NOTICE:  creating a new table for merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  moving the data of merge_repartition_schema.citus_source
+NOTICE:  moving the data of merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  dropping the old merge_repartition_schema.citus_source
+NOTICE:  dropping the old merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  renaming the new table to merge_repartition_schema.citus_source
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
  cleanup_data
 ---------------------------------------------------------------------
@@ -286,7 +286,7 @@ SELECT create_distributed_table('citus_target', 'id');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_target$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_target$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -296,7 +296,7 @@ SELECT create_distributed_table('citus_source', 'id', colocate_with=>'citus_targ
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_source$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_source$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -332,21 +332,21 @@ SQL function "compare_data" statement 2
 -- Repartition with a predicate on target_table_name rows in ON clause
 --
 SELECT cleanup_data();
-NOTICE:  creating a new table for merge_repartition_schema.citus_target
+NOTICE:  creating a new table for merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  moving the data of merge_repartition_schema.citus_target
+NOTICE:  moving the data of merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  dropping the old merge_repartition_schema.citus_target
+NOTICE:  dropping the old merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  renaming the new table to merge_repartition_schema.citus_target
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  creating a new table for merge_repartition_schema.citus_source
+NOTICE:  creating a new table for merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  moving the data of merge_repartition_schema.citus_source
+NOTICE:  moving the data of merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  dropping the old merge_repartition_schema.citus_source
+NOTICE:  dropping the old merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  renaming the new table to merge_repartition_schema.citus_source
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
  cleanup_data
 ---------------------------------------------------------------------
@@ -363,7 +363,7 @@ SELECT create_distributed_table('citus_target', 'id');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_target$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_target$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -373,7 +373,7 @@ SELECT create_distributed_table('citus_source', 'id', colocate_with=>'none');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_source$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_source$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -413,21 +413,21 @@ SQL function "compare_data" statement 2
 -- Test CTE and non-colocated tables
 --
 SELECT cleanup_data();
-NOTICE:  creating a new table for merge_repartition_schema.citus_target
+NOTICE:  creating a new table for merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  moving the data of merge_repartition_schema.citus_target
+NOTICE:  moving the data of merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  dropping the old merge_repartition_schema.citus_target
+NOTICE:  dropping the old merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  renaming the new table to merge_repartition_schema.citus_target
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  creating a new table for merge_repartition_schema.citus_source
+NOTICE:  creating a new table for merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  moving the data of merge_repartition_schema.citus_source
+NOTICE:  moving the data of merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  dropping the old merge_repartition_schema.citus_source
+NOTICE:  dropping the old merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  renaming the new table to merge_repartition_schema.citus_source
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
  cleanup_data
 ---------------------------------------------------------------------
@@ -444,7 +444,7 @@ SELECT create_distributed_table('citus_target', 'id');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_target$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_target$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -454,7 +454,7 @@ SELECT create_distributed_table('citus_source', 'id', colocate_with=>'none');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_source$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_source$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -500,21 +500,21 @@ SQL function "compare_data" statement 2
 -- Test nested CTEs
 --
 SELECT cleanup_data();
-NOTICE:  creating a new table for merge_repartition_schema.citus_target
+NOTICE:  creating a new table for merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  moving the data of merge_repartition_schema.citus_target
+NOTICE:  moving the data of merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  dropping the old merge_repartition_schema.citus_target
+NOTICE:  dropping the old merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  renaming the new table to merge_repartition_schema.citus_target
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  creating a new table for merge_repartition_schema.citus_source
+NOTICE:  creating a new table for merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  moving the data of merge_repartition_schema.citus_source
+NOTICE:  moving the data of merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  dropping the old merge_repartition_schema.citus_source
+NOTICE:  dropping the old merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  renaming the new table to merge_repartition_schema.citus_source
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
  cleanup_data
 ---------------------------------------------------------------------
@@ -531,7 +531,7 @@ SELECT create_distributed_table('citus_target', 'id');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_target$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_target$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -541,7 +541,7 @@ SELECT create_distributed_table('citus_source', 'id', colocate_with=>'none');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_source$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_source$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -599,21 +599,21 @@ SQL function "compare_data" statement 2
 -- Target and source are distributed and colocated
 --
 SELECT cleanup_data();
-NOTICE:  creating a new table for merge_repartition_schema.citus_target
+NOTICE:  creating a new table for merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  moving the data of merge_repartition_schema.citus_target
+NOTICE:  moving the data of merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  dropping the old merge_repartition_schema.citus_target
+NOTICE:  dropping the old merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  renaming the new table to merge_repartition_schema.citus_target
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  creating a new table for merge_repartition_schema.citus_source
+NOTICE:  creating a new table for merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  moving the data of merge_repartition_schema.citus_source
+NOTICE:  moving the data of merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  dropping the old merge_repartition_schema.citus_source
+NOTICE:  dropping the old merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  renaming the new table to merge_repartition_schema.citus_source
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
  cleanup_data
 ---------------------------------------------------------------------
@@ -630,7 +630,7 @@ SELECT create_distributed_table('citus_target', 'id');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_target$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_target$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -640,7 +640,7 @@ SELECT create_distributed_table('citus_source', 'id');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_source$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_source$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -680,21 +680,21 @@ SQL function "compare_data" statement 2
 -- Target is distributed and source is reference
 --
 SELECT cleanup_data();
-NOTICE:  creating a new table for merge_repartition_schema.citus_target
+NOTICE:  creating a new table for merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  moving the data of merge_repartition_schema.citus_target
+NOTICE:  moving the data of merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  dropping the old merge_repartition_schema.citus_target
+NOTICE:  dropping the old merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  renaming the new table to merge_repartition_schema.citus_target
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  creating a new table for merge_repartition_schema.citus_source
+NOTICE:  creating a new table for merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  moving the data of merge_repartition_schema.citus_source
+NOTICE:  moving the data of merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  dropping the old merge_repartition_schema.citus_source
+NOTICE:  dropping the old merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  renaming the new table to merge_repartition_schema.citus_source
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
  cleanup_data
 ---------------------------------------------------------------------
@@ -711,7 +711,7 @@ SELECT create_distributed_table('citus_target', 'id');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_target$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_target$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -721,7 +721,7 @@ SELECT create_reference_table('citus_source');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_source$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_source$$)
  create_reference_table
 ---------------------------------------------------------------------
 
@@ -761,21 +761,21 @@ SQL function "compare_data" statement 2
 -- Target is distributed and reference as source in a sub-query
 --
 SELECT cleanup_data();
-NOTICE:  creating a new table for merge_repartition_schema.citus_target
+NOTICE:  creating a new table for merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  moving the data of merge_repartition_schema.citus_target
+NOTICE:  moving the data of merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  dropping the old merge_repartition_schema.citus_target
+NOTICE:  dropping the old merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  renaming the new table to merge_repartition_schema.citus_target
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  creating a new table for merge_repartition_schema.citus_source
+NOTICE:  creating a new table for merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  moving the data of merge_repartition_schema.citus_source
+NOTICE:  moving the data of merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  dropping the old merge_repartition_schema.citus_source
+NOTICE:  dropping the old merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  renaming the new table to merge_repartition_schema.citus_source
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
  cleanup_data
 ---------------------------------------------------------------------
@@ -792,7 +792,7 @@ SELECT create_distributed_table('citus_target', 'id');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_target$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_target$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -802,7 +802,7 @@ SELECT create_reference_table('citus_source');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_source$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_source$$)
  create_reference_table
 ---------------------------------------------------------------------
 
@@ -840,21 +840,21 @@ SQL function "compare_data" statement 2
 -- Target is distributed and citus-local as source
 --
 SELECT cleanup_data();
-NOTICE:  creating a new table for merge_repartition_schema.citus_target
+NOTICE:  creating a new table for merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  moving the data of merge_repartition_schema.citus_target
+NOTICE:  moving the data of merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  dropping the old merge_repartition_schema.citus_target
+NOTICE:  dropping the old merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  renaming the new table to merge_repartition_schema.citus_target
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  creating a new table for merge_repartition_schema.citus_source
+NOTICE:  creating a new table for merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  moving the data of merge_repartition_schema.citus_source
+NOTICE:  moving the data of merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  dropping the old merge_repartition_schema.citus_source
+NOTICE:  dropping the old merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  renaming the new table to merge_repartition_schema.citus_source
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
  cleanup_data
 ---------------------------------------------------------------------
@@ -871,7 +871,7 @@ SELECT create_distributed_table('citus_target', 'id');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_target$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_target$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -918,21 +918,21 @@ SQL function "compare_data" statement 2
 -- at the coordinator
 --
 SELECT cleanup_data();
-NOTICE:  creating a new table for merge_repartition_schema.citus_target
+NOTICE:  creating a new table for merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  moving the data of merge_repartition_schema.citus_target
+NOTICE:  moving the data of merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  dropping the old merge_repartition_schema.citus_target
+NOTICE:  dropping the old merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  renaming the new table to merge_repartition_schema.citus_target
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  creating a new table for merge_repartition_schema.citus_source
+NOTICE:  creating a new table for merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  moving the data of merge_repartition_schema.citus_source
+NOTICE:  moving the data of merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  dropping the old merge_repartition_schema.citus_source
+NOTICE:  dropping the old merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  renaming the new table to merge_repartition_schema.citus_source
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
  cleanup_data
 ---------------------------------------------------------------------
@@ -949,7 +949,7 @@ SELECT create_distributed_table('citus_target', 'id');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_target$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_target$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -959,7 +959,7 @@ SELECT create_distributed_table('citus_source', 'id', colocate_with=>'none');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_source$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_source$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -1001,21 +1001,21 @@ SQL function "compare_data" statement 2
 
 -- Test source-query that requires repartitioning on top of MERGE repartitioning
 SELECT cleanup_data();
-NOTICE:  creating a new table for merge_repartition_schema.citus_target
+NOTICE:  creating a new table for merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  moving the data of merge_repartition_schema.citus_target
+NOTICE:  moving the data of merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  dropping the old merge_repartition_schema.citus_target
+NOTICE:  dropping the old merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  renaming the new table to merge_repartition_schema.citus_target
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_target
 CONTEXT:  SQL function "cleanup_data" statement 5
-NOTICE:  creating a new table for merge_repartition_schema.citus_source
+NOTICE:  creating a new table for merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  moving the data of merge_repartition_schema.citus_source
+NOTICE:  moving the data of merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  dropping the old merge_repartition_schema.citus_source
+NOTICE:  dropping the old merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
-NOTICE:  renaming the new table to merge_repartition_schema.citus_source
+NOTICE:  renaming the new table to merge_repartition1_schema.citus_source
 CONTEXT:  SQL function "cleanup_data" statement 6
  cleanup_data
 ---------------------------------------------------------------------
@@ -1032,7 +1032,7 @@ SELECT create_distributed_table('citus_target', 'id');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_target$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_target$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -1042,7 +1042,7 @@ SELECT create_distributed_table('citus_source', 'id', colocate_with=>'none');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
-HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition_schema.citus_source$$)
+HINT:  To remove the local data, run: SELECT truncate_local_data_after_distributing_table($$merge_repartition1_schema.citus_source$$)
  create_distributed_table
 ---------------------------------------------------------------------
 
@@ -1071,7 +1071,7 @@ SQL function "compare_data" statement 2
 
 (1 row)
 
-DROP SCHEMA merge_repartition_schema CASCADE;
+DROP SCHEMA merge_repartition1_schema CASCADE;
 NOTICE:  drop cascades to 8 other objects
 DETAIL:  drop cascades to table pg_target
 drop cascades to table pg_source

@@ -12,9 +12,9 @@ SELECT substring(:'server_version', '\d+')::int >= 15 AS server_version_ge_15
 -- The results should match. This process is repeated for various combinations
 -- of MERGE SQL.
 
-DROP SCHEMA IF EXISTS merge_repartition_schema CASCADE;
-CREATE SCHEMA merge_repartition_schema;
-SET search_path TO merge_repartition_schema;
+DROP SCHEMA IF EXISTS merge_repartition1_schema CASCADE;
+CREATE SCHEMA merge_repartition1_schema;
+SET search_path TO merge_repartition1_schema;
 SET citus.shard_count TO 4;
 SET citus.next_shard_id TO 5000000;
 SET citus.explain_all_tasks TO true;
@@ -454,4 +454,4 @@ WHEN MATCHED THEN
 
 SELECT compare_data();
 
-DROP SCHEMA merge_repartition_schema CASCADE;
+DROP SCHEMA merge_repartition1_schema CASCADE;

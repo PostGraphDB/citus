@@ -2129,8 +2129,21 @@ CitusCopyDestReceiverStartup(DestReceiver *dest, int operation,
 		Oid *finalTypeArray = palloc0(columnCount * sizeof(Oid));
 
 		/*
-		 * When copying to intermediate files, we can skip coercions and run them
-		 * when merging into the target tables.
+		 * To ensure the proper co-location and distribution of the target table,
+		 * the entire process of repartitioning intermediate files requires the
+		 * destReceiver to be created on the target rather than the source.
+		 *
+		 * Within this specific code path, it is assumed that the employed model
+		 * is for insert-select. Consequently, it validates the column types of
+		 * destTupleDescriptor(target) during the intermediate result generation
+		 * process. However, this approach varies significantly for MERGE operations,
+		 * where the source tuple(s) can have arbitrary types and are not required to
+		 * align with the target column names.
+		 *
+		 * Despite this minor setback, a significant portion of the code responsible
+		 * for repartitioning intermediate files can be reused for the MERGE
+		 * operation. By leveraging the ability to perform actual coercion during
+		 * the writing process to the target table, we can bypass this specific route.
 		 */
 		if (copyDest->skipCoercions)
 		{

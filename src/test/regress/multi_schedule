@@ -111,7 +111,7 @@ test: background_task_queue_monitor
 test: clock
 
 # MERGE tests
-test: merge merge_repartition pgmerge
+test: merge merge_repartition1 pgmerge merge_repartition2
 
 # ---------
 # test that no tests leaked intermediate results. This should always be last

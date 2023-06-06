@@ -27,10 +27,6 @@
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 
-
-static int sourceResultPartitionColumnIndex(Query *mergeQuery,
-											List *sourceTargetList,
-											CitusTableCacheEntry *targetRelation);
 static void ExecuteSourceAtWorkerAndRepartition(CitusScanState *scanState);
 static void ExecuteSourceAtCoordAndRedistribution(CitusScanState *scanState);
 static HTAB * ExecuteMergeSourcePlanIntoColocatedIntermediateResults(Oid targetRelationId,
@@ -41,7 +37,9 @@ static HTAB * ExecuteMergeSourcePlanIntoColocatedIntermediateResults(Oid targetR
 																	 sourcePlan,
 																	 EState *executorState,
 																	 char *
-																	 intermediateResultIdPrefix);
+																	 intermediateResultIdPrefix,
+																	 int
+																	 partitionColumnIndex);
 
 
 /*
@@ -155,10 +153,7 @@ ExecuteSourceAtWorkerAndRepartition(CitusScanState *scanState)
 	 * use for (re)partitioning of the source result, which will colocate
 	 * the result data with the target.
 	 */
-	int partitionColumnIndex =
-		sourceResultPartitionColumnIndex(mergeQuery,
-										 sourceQuery->targetList,
-										 targetRelation);
+	int partitionColumnIndex = distributedPlan->sourceResultRepartitionColumnIndex;
 
 	/*
 	 * Below call partitions the results using shard ranges and partition method of
@@ -221,6 +216,7 @@ ExecuteSourceAtCoordAndRedistribution(CitusScanState *scanState)
 		copyObject(distributedPlan->selectPlanForModifyViaCoordinatorOrRepartition);
 	char *intermediateResultIdPrefix = distributedPlan->intermediateResultIdPrefix;
 	bool hasReturning = distributedPlan->expectResults;
+	int partitionColumnIndex = distributedPlan->sourceResultRepartitionColumnIndex;
 
 	/*
 	 * If we are dealing with partitioned table, we also need to lock its
@@ -242,7 +238,8 @@ ExecuteSourceAtCoordAndRedistribution(CitusScanState *scanState)
 			sourceQuery->targetList,     /*TODO */
 			sourcePlan,
 			executorState,
-			intermediateResultIdPrefix);
+			intermediateResultIdPrefix,
+			partitionColumnIndex);
 
 	ereport(DEBUG1, (errmsg("Create a MERGE task list that needs to be routed")));
 
@@ -293,98 +290,6 @@ ExecuteSourceAtCoordAndRedistribution(CitusScanState *scanState)
 
 
 /*
- * sourceResultPartitionColumnIndex collects all Join conditions from the
- * ON clause and verifies if there is a join, either left or right, with
- * the distribution column of the given target. Once a match is found, it
- * returns the index of that match in the source's target list.
- */
-static int
-sourceResultPartitionColumnIndex(Query *mergeQuery, List *sourceTargetList,
-								 CitusTableCacheEntry *targetRelation)
-{
-	/* Get all the Join conditions from the ON clause */
-	List *mergeJoinConditionList = WhereClauseList(mergeQuery->jointree);
-
-	Var *targetColumn = targetRelation->partitionColumn;
-	bool joinedOnInsertColumn = false;
-	Var *sourceRepartitionVar = NULL;
-
-	OpExpr *validJoinClause =
-		SinglePartitionJoinClause(list_make1(targetColumn), mergeJoinConditionList);
-	if (!validJoinClause)
-	{
-		ereport(ERROR, (errmsg("Missing required join condition between "
-							   "target's distribution column and any "
-							   "expression originated from the source"),
-						errdetail("Without a join condition on the target's "
-								  "distribution column, the source rows "
-								  "cannot be efficiently redistributed, and "
-								  "the NOT-MATCHED condition cannot be evaluated "
-								  "unambiguously. This can result in incorrect or "
-								  "unexpected results when attempting to merge "
-								  "tables in a distributed setting")));
-	}
-
-	Var *insertVar =
-		FetchAndValidateInsertVarIfExists(targetRelation->relationId, mergeQuery);
-	if (insertVar)
-	{
-		/* INSERT action, choose joining column for inserted value */
-		joinedOnInsertColumn =
-			JoinOnColumns(list_make1(targetColumn), insertVar, mergeJoinConditionList);
-		if (joinedOnInsertColumn)
-		{
-			sourceRepartitionVar = insertVar;
-		}
-		else
-		{
-			ereport(ERROR, (errmsg("MERGE INSERT must use the "
-								   "source's joining column for "
-								   "target's distribution column")));
-		}
-	}
-	else
-	{
-		/* No INSERT action, choose any joining column for repartitioning */
-
-		/* both are verified in SinglePartitionJoinClause to not be NULL, assert is to guard */
-		Var *leftColumn = LeftColumnOrNULL(validJoinClause);
-		Var *rightColumn = RightColumnOrNULL(validJoinClause);
-
-		Assert(leftColumn != NULL);
-		Assert(rightColumn != NULL);
-
-		if (equal(targetColumn, leftColumn))
-		{
-			sourceRepartitionVar = rightColumn;
-		}
-		else if (equal(targetColumn, rightColumn))
-		{
-			sourceRepartitionVar = leftColumn;
-		}
-	}
-
-	Assert(sourceRepartitionVar);
-
-	int sourceResultRepartitionColumnIndex =
-		DistributionColumnIndex(sourceTargetList, sourceRepartitionVar);
-
-	if (sourceResultRepartitionColumnIndex == -1)
-	{
-		ereport(ERROR,
-				(errmsg("Unexpected column index of the source list")));
-	}
-	else
-	{
-		ereport(DEBUG1, (errmsg("Using column - index:%d from the source list "
-								"to redistribute", sourceResultRepartitionColumnIndex)));
-	}
-
-	return sourceResultRepartitionColumnIndex;
-}
-
-
-/*
  * ExecuteMergeSourcePlanIntoColocatedIntermediateResults Executes the given PlannedStmt
  * and inserts tuples into a set of intermediate results that are colocated with the
  * target table for further processing MERGE INTO. It also returns the hash of shard
@@ -396,17 +301,14 @@ ExecuteMergeSourcePlanIntoColocatedIntermediateResults(Oid targetRelationId,
 													   List *sourceTargetList,
 													   PlannedStmt *sourcePlan,
 													   EState *executorState,
-													   char *intermediateResultIdPrefix)
+													   char *intermediateResultIdPrefix,
+													   int partitionColumnIndex)
 {
 	ParamListInfo paramListInfo = executorState->es_param_list_info;
-	CitusTableCacheEntry *targetRelation = GetCitusTableCacheEntry(targetRelationId);
 
 	/* Get column name list and partition column index for the target table */
-	List *columnNameList = BuildColumnNameListFromTargetList(targetRelationId,
-															 sourceTargetList);
-	int partitionColumnIndex = sourceResultPartitionColumnIndex(mergeQuery,
-																sourceTargetList,
-																targetRelation);
+	List *columnNameList =
+		BuildColumnNameListFromTargetList(targetRelationId, sourceTargetList);
 
 	/* set up a DestReceiver that copies into the intermediate file */
 	const bool publishableData = false;

@@ -2398,6 +2398,17 @@ ON t.id1 = s.cid
 WHEN NOT MATCHED THEN
 	DO NOTHING;
 
+MERGE INTO demo_distributed t
+USING generate_series(0,100) as source(key)
+ON (source.key + 1 = t.id1)
+	WHEN MATCHED THEN UPDATE SET val1 = 15;
+
+-- This should fail in planning stage itself
+EXPLAIN MERGE INTO demo_distributed t
+USING demo_source_table s
+ON (s.id2 + 1 = t.id1)
+	WHEN MATCHED THEN UPDATE SET val1 = 15;
+
 RESET client_min_messages;
 DROP SERVER foreign_server CASCADE;
 DROP FUNCTION merge_when_and_write();
