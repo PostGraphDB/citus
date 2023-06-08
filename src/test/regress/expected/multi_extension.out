@@ -88,10 +88,11 @@ WHERE pgd.refclassid = 'pg_extension'::regclass AND
 	  pge.extname    = 'citus' AND
 	  pgio.schema    NOT IN ('pg_catalog', 'citus', 'citus_internal', 'test', 'columnar', 'columnar_internal')
 ORDER BY 1, 2;
- type |      identity
+ type |       identity
 ---------------------------------------------------------------------
+ view | public.citus_schemas
  view | public.citus_tables
-(1 row)
+(2 rows)
 
 -- DROP EXTENSION pre-created by the regression suite
 DROP EXTENSION citus;
@@ -1357,13 +1358,14 @@ SELECT * FROM multi_extension.print_extension_changes();
 -- Snapshot of state at 12.0-1
 ALTER EXTENSION citus UPDATE TO '12.0-1';
 SELECT * FROM multi_extension.print_extension_changes();
- previous_object |                         current_object
+ previous_object |                              current_object
 ---------------------------------------------------------------------
                  | function citus_internal_add_tenant_schema(oid,integer) void
                  | function citus_internal_delete_tenant_schema(oid) void
                  | function citus_internal_unregister_tenant_schema_globally(oid,text) void
                  | table pg_dist_tenant_schema
-(4 rows)
+                 | view public.citus_schemas
+(5 rows)
 
 DROP TABLE multi_extension.prev_objects, multi_extension.extension_diff;
 -- show running version
@@ -1383,10 +1385,11 @@ WHERE pgd.refclassid = 'pg_extension'::regclass AND
 	  pge.extname    = 'citus' AND
 	  pgio.schema    NOT IN ('pg_catalog', 'citus', 'citus_internal', 'test', 'columnar', 'columnar_internal')
 ORDER BY 1, 2;
- type |      identity
+ type |       identity
 ---------------------------------------------------------------------
+ view | public.citus_schemas
  view | public.citus_tables
-(1 row)
+(2 rows)
 
 -- see incompatible version errors out
 RESET citus.enable_version_checks;
@@ -1494,10 +1497,11 @@ ALTER EXTENSION citus UPDATE;
 -- if cache is invalidated succesfull, this \d should work without any problem
 \d
             List of relations
- Schema |     Name     | Type |  Owner
+ Schema |     Name      | Type |  Owner
 ---------------------------------------------------------------------
- public | citus_tables | view | postgres
-(1 row)
+ public | citus_schemas | view | postgres
+ public | citus_tables  | view | postgres
+(2 rows)
 
 \c - - - :master_port
 -- test https://github.com/citusdata/citus/issues/3409
