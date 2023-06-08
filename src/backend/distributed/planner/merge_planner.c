@@ -39,7 +39,7 @@
 static int sourceResultPartitionColumnIndex(Query *mergeQuery,
 											List *sourceTargetList,
 											CitusTableCacheEntry *targetRelation);
-static Var * ValidateAndReturnVarIfSupported(Expr *entryExpr);
+static Var * ValidateAndReturnVarIfSupported(Node *entryExpr);
 static void ErrorIfMergeQueryQualAndTargetListNotSupported(Oid targetRelationId,
 														   Query *originalQuery);
 static void ErrorIfMergeNotSupported(Query *query, Oid targetRelationId,
@@ -1064,41 +1064,16 @@ MergeCommandResultIdPrefix(uint64 planId)
  * returns the Var if it finds one, for everything else, raises an exception.
  */
 static Var *
-ValidateAndReturnVarIfSupported(Expr *entryExpr)
+ValidateAndReturnVarIfSupported(Node *entryExpr)
 {
-	switch (entryExpr->type)
+	if (!IsA(entryExpr, Var))
 	{
-		case T_Var:
-		{
-			/* Found a Var inserting into target's distribution column */
-			return (Var *) entryExpr;
-		}
-
-		case T_Const:
-		{
-			/* Inserting constant VALUES is not allowed */
-		}
-
-		case T_FuncExpr:
-		{
-			FuncExpr *funcExpr = (FuncExpr *) entryExpr;
-
-			if (funcExpr->funcformat == COERCE_IMPLICIT_CAST &&
-				list_length(funcExpr->args) == 1 &&
-				IsA(linitial(funcExpr->args), Var))
-			{
-				return (Var *) linitial(funcExpr->args);
-			}
-		}
-
-		/* fall through */
-		default:
-		{
-			ereport(ERROR, (errmsg("MERGE INSERT is using unsupported expression type "
-								   "for distribution column")));
-		}
+		ereport(ERROR, (errmsg("MERGE INSERT is using unsupported expression type "
+							   "for distribution column")));
 	}
-	return NULL;
+
+	/* Found a Var inserting into target's distribution column */
+	return (Var *) entryExpr;
 }
 
 
@@ -1141,9 +1116,7 @@ sourceResultPartitionColumnIndex(Query *mergeQuery, List *sourceTargetList,
 	if (insertVar)
 	{
 		/* INSERT action, choose joining column for inserted value */
-		bool joinedOnInsertColumn = false;
-
-		joinedOnInsertColumn =
+		bool joinedOnInsertColumn =
 			JoinOnColumns(list_make1(targetColumn), insertVar, mergeJoinConditionList);
 		if (joinedOnInsertColumn)
 		{
@@ -1320,7 +1293,9 @@ FetchAndValidateInsertVarIfExists(Oid targetRelationId, Query *query)
 
 			foundDistributionColumn = true;
 
-			return ValidateAndReturnVarIfSupported(targetEntry->expr);
+			Node *insertExpr =
+				strip_implicit_coercions((Node *) copyObject(targetEntry->expr));
+			return ValidateAndReturnVarIfSupported(insertExpr);
 		}
 
 		if (!foundDistributionColumn)

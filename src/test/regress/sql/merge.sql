@@ -145,7 +145,7 @@ SELECT insert_data();
 SELECT undistribute_table('target');
 SELECT undistribute_table('source');
 SELECT create_distributed_table('target', 'customer_id');
-SELECT create_distributed_table('source', 'customer_id');
+SELECT create_distributed_table('source', 'customer_id', colocate_with=>'target');
 
 -- Updates one of the row with customer_id  = 30002
 SELECT * from target t WHERE t.customer_id  = 30002;
@@ -283,7 +283,7 @@ TRUNCATE t1;
 TRUNCATE s1;
 SELECT load();
 SELECT create_distributed_table('t1', 'id');
-SELECT create_distributed_table('s1', 'id');
+SELECT create_distributed_table('s1', 'id', colocate_with=>'t1');
 
 
 SELECT * FROM t1 order by id;
@@ -371,7 +371,7 @@ SELECT insert_data();
 SELECT undistribute_table('t2');
 SELECT undistribute_table('s2');
 SELECT create_distributed_table('t2', 'id');
-SELECT create_distributed_table('s2', 'id');
+SELECT create_distributed_table('s2', 'id', colocate_with => 't2');
 
 SELECT * FROM t2 ORDER BY 1;
 SET citus.log_remote_commands to true;
@@ -927,8 +927,8 @@ ROLLBACK;
 -- Test the same scenarios with distributed tables
 
 SELECT create_distributed_table('target_cj', 'tid');
-SELECT create_distributed_table('source_cj1', 'sid1');
-SELECT create_distributed_table('source_cj2', 'sid2');
+SELECT create_distributed_table('source_cj1', 'sid1', colocate_with => 'target_cj');
+SELECT create_distributed_table('source_cj2', 'sid2', colocate_with => 'target_cj');
 
 BEGIN;
 MERGE INTO target_cj t

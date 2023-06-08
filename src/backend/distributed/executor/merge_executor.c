@@ -165,8 +165,8 @@ ExecuteSourceAtWorkerAndRepartition(CitusScanState *scanState)
 									distSourceTaskList, partitionColumnIndex,
 									targetRelation, binaryFormat);
 
-	ereport(DEBUG1, (errmsg(
-						 "Executing final MERGE on workers using intermediate results")));
+	ereport(DEBUG1, (errmsg("Executing final MERGE on workers using "
+							"intermediate results")));
 
 	/*
 	 * At this point source query has been executed on workers and results
@@ -182,14 +182,16 @@ ExecuteSourceAtWorkerAndRepartition(CitusScanState *scanState)
 
 	scanState->tuplestorestate =
 		tuplestore_begin_heap(randomAccess, interTransactions, work_mem);
+	ParamListInfo paramListInfo = executorState->es_param_list_info;
 	TupleDesc tupleDescriptor = ScanStateGetTupleDescriptor(scanState);
 	TupleDestination *tupleDest =
 		CreateTupleStoreTupleDest(scanState->tuplestorestate,
 								  tupleDescriptor);
 	uint64 rowsMerged =
-		ExecuteTaskListIntoTupleDest(ROW_MODIFY_NONCOMMUTATIVE, taskList,
-									 tupleDest,
-									 hasReturning);
+		ExecuteTaskListIntoTupleDestWithParam(ROW_MODIFY_NONCOMMUTATIVE, taskList,
+											  tupleDest,
+											  hasReturning,
+											  paramListInfo);
 	executorState->es_processed = rowsMerged;
 }
 
@@ -280,11 +282,15 @@ ExecuteSourceAtCoordAndRedistribution(CitusScanState *scanState)
 	scanState->tuplestorestate = tuplestore_begin_heap(randomAccess, interTransactions,
 													   work_mem);
 	TupleDesc tupleDescriptor = ScanStateGetTupleDescriptor(scanState);
+	ParamListInfo paramListInfo = executorState->es_param_list_info;
 	TupleDestination *tupleDest =
 		CreateTupleStoreTupleDest(scanState->tuplestorestate, tupleDescriptor);
 	uint64 rowsMerged =
-		ExecuteTaskListIntoTupleDest(ROW_MODIFY_NONCOMMUTATIVE, prunedTaskList,
-									 tupleDest, hasReturning);
+		ExecuteTaskListIntoTupleDestWithParam(ROW_MODIFY_NONCOMMUTATIVE,
+											  prunedTaskList,
+											  tupleDest,
+											  hasReturning,
+											  paramListInfo);
 	executorState->es_processed = rowsMerged;
 }
 

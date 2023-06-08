@@ -45,10 +45,10 @@ LANGUAGE SQL;
 -- Load same set of data to both Postgres and Citus tables
 --
 CREATE OR REPLACE FUNCTION setup_data() RETURNS VOID AS $$
-    INSERT INTO pg_source SELECT i, i+1, 1 FROM generate_series(1, 100000) i;
-    INSERT INTO pg_target SELECT i, 1 FROM generate_series(50001, 100000) i;
-    INSERT INTO citus_source SELECT i, i+1, 1 FROM generate_series(1, 100000) i;
-    INSERT INTO citus_target SELECT i, 1 FROM generate_series(50001, 100000) i;
+    INSERT INTO pg_source SELECT i, i+1, 1 FROM generate_series(1, 10000) i;
+    INSERT INTO pg_target SELECT i, 1 FROM generate_series(5001, 10000) i;
+    INSERT INTO citus_source SELECT i, i+1, 1 FROM generate_series(1, 10000) i;
+    INSERT INTO citus_target SELECT i, 1 FROM generate_series(5001, 10000) i;
 $$
 LANGUAGE SQL;
 
@@ -91,7 +91,7 @@ SELECT create_distributed_table('citus_source', 'id', colocate_with=>'none');
 MERGE INTO pg_target t
 USING pg_source s
 ON t.id = s.id
-WHEN MATCHED AND t.id <= 75000 THEN
+WHEN MATCHED AND t.id <= 7500 THEN
         UPDATE SET val = s.val + 1
 WHEN MATCHED THEN
 	DELETE
@@ -101,7 +101,7 @@ WHEN NOT MATCHED THEN
 MERGE INTO citus_target t
 USING citus_source s
 ON t.id = s.id
-WHEN MATCHED AND t.id <= 75000 THEN
+WHEN MATCHED AND t.id <= 7500 THEN
         UPDATE SET val = s.val + 1
 WHEN MATCHED THEN
 	DELETE
@@ -121,7 +121,7 @@ SELECT create_distributed_table('citus_source', 'id', colocate_with=>'citus_targ
 MERGE INTO pg_target t
 USING (SELECT * FROM pg_source) subq
 ON (subq.val = t.id)
-WHEN MATCHED AND t.id <= 75000 THEN
+WHEN MATCHED AND t.id <= 7500 THEN
         UPDATE SET val = subq.val + 1
 WHEN MATCHED THEN
         DELETE
@@ -131,7 +131,7 @@ WHEN NOT MATCHED THEN
 MERGE INTO citus_target t
 USING (SELECT * FROM citus_source) subq
 ON (subq.val = t.id)
-WHEN MATCHED AND t.id <= 75000 THEN
+WHEN MATCHED AND t.id <= 7500 THEN
         UPDATE SET val = subq.val + 1
 WHEN MATCHED THEN
         DELETE
@@ -176,9 +176,9 @@ SELECT create_distributed_table('citus_target', 'id');
 SELECT create_distributed_table('citus_source', 'id', colocate_with=>'none');
 
 MERGE INTO pg_target t
-USING (SELECT * FROM pg_source WHERE id < 95000) s
-ON t.id = s.id AND t.id < 90000
-WHEN MATCHED AND t.id <= 75000 THEN
+USING (SELECT * FROM pg_source WHERE id < 9500) s
+ON t.id = s.id AND t.id < 9000
+WHEN MATCHED AND t.id <= 7500 THEN
     UPDATE SET val = s.val + 1
 WHEN MATCHED THEN
     DELETE
@@ -186,9 +186,9 @@ WHEN NOT MATCHED THEN
     INSERT VALUES(s.id, s.val);
 
 MERGE INTO citus_target t
-USING (SELECT * FROM citus_source WHERE id < 95000) s
-ON t.id = s.id AND t.id < 90000
-WHEN MATCHED AND t.id <= 75000 THEN
+USING (SELECT * FROM citus_source WHERE id < 9500) s
+ON t.id = s.id AND t.id < 9000
+WHEN MATCHED AND t.id <= 7500 THEN
     UPDATE SET val = s.val + 1
 WHEN MATCHED THEN
     DELETE
@@ -211,7 +211,7 @@ WITH cte AS (
 MERGE INTO pg_target t
 USING cte s
 ON s.id = t.id
-WHEN MATCHED AND t.id > 75000 THEN
+WHEN MATCHED AND t.id > 7500 THEN
     UPDATE SET val = s.val + 1
 WHEN MATCHED THEN
         DELETE
@@ -224,7 +224,7 @@ WITH cte AS (
 MERGE INTO citus_target t
 USING cte s
 ON s.id = t.id
-WHEN MATCHED AND t.id > 75000 THEN
+WHEN MATCHED AND t.id > 7500 THEN
     UPDATE SET val = s.val + 1
 WHEN MATCHED THEN
         DELETE
@@ -242,7 +242,7 @@ SELECT create_distributed_table('citus_target', 'id');
 SELECT create_distributed_table('citus_source', 'id', colocate_with=>'none');
 
 WITH cte1 AS (
-    SELECT * FROM pg_source ORDER BY 1 LIMIT 90000
+    SELECT * FROM pg_source ORDER BY 1 LIMIT 9000
 ),
 cte2 AS(
     SELECT * FROM cte1
@@ -253,7 +253,7 @@ cte3 AS(
 MERGE INTO pg_target t
 USING cte3 s
 ON (s.id=t.id)
-WHEN MATCHED AND t.id > 75000 THEN
+WHEN MATCHED AND t.id > 7500 THEN
     UPDATE SET val = s.val + 1
 WHEN MATCHED THEN
     DELETE
@@ -261,7 +261,7 @@ WHEN NOT MATCHED THEN
     INSERT VALUES (s.id, s.val);
 
 WITH cte1 AS (
-    SELECT * FROM citus_source ORDER BY 1 LIMIT 90000
+    SELECT * FROM citus_source ORDER BY 1 LIMIT 9000
 ),
 cte2 AS(
     SELECT * FROM cte1
@@ -272,7 +272,7 @@ cte3 AS(
 MERGE INTO citus_target t
 USING cte3 s
 ON (s.id=t.id)
-WHEN MATCHED AND t.id > 75000 THEN
+WHEN MATCHED AND t.id > 7500 THEN
     UPDATE SET val = s.val + 1
 WHEN MATCHED THEN
     DELETE
@@ -290,9 +290,9 @@ SELECT create_distributed_table('citus_target', 'id');
 SELECT create_distributed_table('citus_source', 'id');
 
 MERGE INTO pg_target t
-USING (SELECT 999 as newval, pg_source.* FROM (SELECT * FROM pg_source ORDER BY 1 LIMIT 60000) as src LEFT JOIN pg_source USING(id)) AS s
+USING (SELECT 999 as newval, pg_source.* FROM (SELECT * FROM pg_source ORDER BY 1 LIMIT 6000) as src LEFT JOIN pg_source USING(id)) AS s
 ON t.id = s.id
-WHEN MATCHED AND t.id <= 55000 THEN
+WHEN MATCHED AND t.id <= 5500 THEN
 	UPDATE SET val = newval
 WHEN MATCHED THEN
 	DELETE
@@ -300,9 +300,9 @@ WHEN NOT MATCHED THEN
 	INSERT VALUES(id, newval);
 
 MERGE INTO citus_target t
-USING (SELECT 999 as newval, citus_source.* FROM (SELECT * FROM citus_source ORDER BY 1 LIMIT 60000) as src LEFT JOIN citus_source USING(id)) AS s
+USING (SELECT 999 as newval, citus_source.* FROM (SELECT * FROM citus_source ORDER BY 1 LIMIT 6000) as src LEFT JOIN citus_source USING(id)) AS s
 ON t.id = s.id
-WHEN MATCHED AND t.id <= 55000 THEN
+WHEN MATCHED AND t.id <= 5500 THEN
 	UPDATE SET val = newval
 WHEN MATCHED THEN
 	DELETE
@@ -322,7 +322,7 @@ SELECT create_reference_table('citus_source');
 MERGE INTO pg_target t
 USING pg_source s
 ON t.id = s.id
-WHEN MATCHED AND t.id <= 75000 THEN
+WHEN MATCHED AND t.id <= 7500 THEN
         UPDATE SET val = s.val + 1
 WHEN MATCHED THEN
 	DELETE
@@ -332,7 +332,7 @@ WHEN NOT MATCHED THEN
 MERGE INTO citus_target t
 USING citus_source s
 ON t.id = s.id
-WHEN MATCHED AND t.id <= 75000 THEN
+WHEN MATCHED AND t.id <= 7500 THEN
         UPDATE SET val = s.val + 1
 WHEN MATCHED THEN
 	DELETE
@@ -351,7 +351,7 @@ SELECT create_reference_table('citus_source');
 
 MERGE INTO pg_target t
 USING (SELECT * FROM pg_source UNION SELECT * FROM pg_source) AS s ON t.id = s.id
-WHEN MATCHED AND t.id <= 75000 THEN
+WHEN MATCHED AND t.id <= 7500 THEN
         UPDATE SET val = s.val + t.val
 WHEN MATCHED THEN
 	DELETE
@@ -360,7 +360,7 @@ WHEN NOT MATCHED THEN
 
 MERGE INTO citus_target t
 USING (SELECT * FROM citus_source UNION SELECT * FROM citus_source) AS s ON t.id = s.id
-WHEN MATCHED AND t.id <= 75000 THEN
+WHEN MATCHED AND t.id <= 7500 THEN
         UPDATE SET val = s.val + t.val
 WHEN MATCHED THEN
 	DELETE
@@ -379,7 +379,7 @@ SELECT citus_add_local_table_to_metadata('citus_source');
 MERGE INTO pg_target t
 USING pg_source s
 ON t.id = s.id
-WHEN MATCHED AND t.id <= 75000 THEN
+WHEN MATCHED AND t.id <= 7500 THEN
         UPDATE SET val = s.val + 1
 WHEN MATCHED THEN
 	DELETE
@@ -389,7 +389,7 @@ WHEN NOT MATCHED THEN
 MERGE INTO citus_target t
 USING citus_source s
 ON t.id = s.id
-WHEN MATCHED AND t.id <= 75000 THEN
+WHEN MATCHED AND t.id <= 7500 THEN
         UPDATE SET val = s.val + 1
 WHEN MATCHED THEN
 	DELETE
@@ -410,9 +410,9 @@ SELECT create_distributed_table('citus_source', 'id', colocate_with=>'none');
 MERGE INTO pg_target t
 USING (SELECT 100 AS insval, MAX(const) AS updval, val, MAX(id) AS sid
 	FROM pg_source
-	GROUP BY val ORDER BY sid LIMIT 60000) AS s
+	GROUP BY val ORDER BY sid LIMIT 6000) AS s
 ON t.id = s.sid
-WHEN MATCHED AND t.id <= 55000 THEN
+WHEN MATCHED AND t.id <= 5500 THEN
         UPDATE SET val = updval + 1
 WHEN MATCHED THEN
         DELETE
@@ -422,9 +422,9 @@ WHEN NOT MATCHED THEN
 MERGE INTO citus_target t
 USING (SELECT 100 AS insval, MAX(const) AS updval, val, MAX(id) AS sid
 	FROM citus_source
-	GROUP BY val ORDER BY sid LIMIT 60000) AS s
+	GROUP BY val ORDER BY sid LIMIT 6000) AS s
 ON t.id = s.sid
-WHEN MATCHED AND t.id <= 55000 THEN
+WHEN MATCHED AND t.id <= 5500 THEN
         UPDATE SET val = updval + 1
 WHEN MATCHED THEN
         DELETE

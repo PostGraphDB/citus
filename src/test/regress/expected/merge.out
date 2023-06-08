@@ -207,7 +207,7 @@ HINT:  To remove the local data, run: SELECT truncate_local_data_after_distribut
 
 (1 row)
 
-SELECT create_distributed_table('source', 'customer_id');
+SELECT create_distributed_table('source', 'customer_id', colocate_with=>'target');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
@@ -441,7 +441,7 @@ HINT:  To remove the local data, run: SELECT truncate_local_data_after_distribut
 
 (1 row)
 
-SELECT create_distributed_table('s1', 'id');
+SELECT create_distributed_table('s1', 'id', colocate_with=>'t1');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
@@ -651,7 +651,7 @@ HINT:  To remove the local data, run: SELECT truncate_local_data_after_distribut
 
 (1 row)
 
-SELECT create_distributed_table('s2', 'id');
+SELECT create_distributed_table('s2', 'id', colocate_with => 't2');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
@@ -1405,7 +1405,7 @@ HINT:  To remove the local data, run: SELECT truncate_local_data_after_distribut
 
 (1 row)
 
-SELECT create_distributed_table('source_cj1', 'sid1');
+SELECT create_distributed_table('source_cj1', 'sid1', colocate_with => 'target_cj');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
@@ -1415,7 +1415,7 @@ HINT:  To remove the local data, run: SELECT truncate_local_data_after_distribut
 
 (1 row)
 
-SELECT create_distributed_table('source_cj2', 'sid2');
+SELECT create_distributed_table('source_cj2', 'sid2', colocate_with => 'target_cj');
 NOTICE:  Copying data from local table...
 NOTICE:  copying the data has completed
 DETAIL:  The local data in the table is no longer visible, but is still on disk.
@@ -1552,11 +1552,6 @@ BEGIN;
 SET citus.log_remote_commands to true;
 SET client_min_messages TO DEBUG1;
 EXECUTE merge_prepare(2);
-DEBUG:  <Deparsed MERGE query: MERGE INTO merge_schema.target_cj_xxxxxxx target USING (SELECT source_cj1.sid1, source_cj1.src1, source_cj1.val1 FROM merge_schema.source_cj1_xxxxxxx source_cj1) sub ON ((target.tid OPERATOR(pg_catalog.=) sub.sid1) AND (target.tid OPERATOR(pg_catalog.=) $1)) WHEN MATCHED THEN UPDATE SET val = sub.val1 WHEN NOT MATCHED THEN DO NOTHING >
-DEBUG:  <Deparsed MERGE query: MERGE INTO merge_schema.target_cj_xxxxxxx target USING (SELECT source_cj1.sid1, source_cj1.src1, source_cj1.val1 FROM merge_schema.source_cj1_xxxxxxx source_cj1) sub ON ((target.tid OPERATOR(pg_catalog.=) sub.sid1) AND (target.tid OPERATOR(pg_catalog.=) $1)) WHEN MATCHED THEN UPDATE SET val = sub.val1 WHEN NOT MATCHED THEN DO NOTHING >
-DEBUG:  <Deparsed MERGE query: MERGE INTO merge_schema.target_cj_xxxxxxx target USING (SELECT source_cj1.sid1, source_cj1.src1, source_cj1.val1 FROM merge_schema.source_cj1_xxxxxxx source_cj1) sub ON ((target.tid OPERATOR(pg_catalog.=) sub.sid1) AND (target.tid OPERATOR(pg_catalog.=) $1)) WHEN MATCHED THEN UPDATE SET val = sub.val1 WHEN NOT MATCHED THEN DO NOTHING >
-DEBUG:  <Deparsed MERGE query: MERGE INTO merge_schema.target_cj_xxxxxxx target USING (SELECT source_cj1.sid1, source_cj1.src1, source_cj1.val1 FROM merge_schema.source_cj1_xxxxxxx source_cj1) sub ON ((target.tid OPERATOR(pg_catalog.=) sub.sid1) AND (target.tid OPERATOR(pg_catalog.=) $1)) WHEN MATCHED THEN UPDATE SET val = sub.val1 WHEN NOT MATCHED THEN DO NOTHING >
-DEBUG:  Creating MERGE router plan
 DEBUG:  <Deparsed MERGE query: MERGE INTO merge_schema.target_cj_xxxxxxx target USING (SELECT source_cj1.sid1, source_cj1.src1, source_cj1.val1 FROM merge_schema.source_cj1_xxxxxxx source_cj1) sub ON ((target.tid OPERATOR(pg_catalog.=) sub.sid1) AND (target.tid OPERATOR(pg_catalog.=) $1)) WHEN MATCHED THEN UPDATE SET val = sub.val1 WHEN NOT MATCHED THEN DO NOTHING >
 DEBUG:  Creating MERGE router plan
 NOTICE:  issuing BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;SELECT assign_distributed_transaction_id(xx, xx, 'xxxxxxx');

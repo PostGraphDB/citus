@@ -925,6 +925,10 @@ GetRouterPlanType(Query *query, Query *originalQuery, bool hasUnresolvedParams)
 	}
 	else if (IsMergeQuery(originalQuery))
 	{
+		if (hasUnresolvedParams)
+		{
+			return REPLAN_WITH_BOUND_PARAMETERS;
+		}
 		return MERGE_QUERY;
 	}
 	else
