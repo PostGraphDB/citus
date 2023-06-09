@@ -22,10 +22,12 @@ $CSCQ$;
 
 IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'public') THEN
     EXECUTE format(citus_schemas_create_query, 'public');
+    REVOKE ALL ON public.citus_schemas FROM public;
     GRANT SELECT ON public.citus_schemas TO public;
 ELSE
     EXECUTE format(citus_schemas_create_query, 'citus');
     ALTER VIEW citus.citus_schemas SET SCHEMA pg_catalog;
+    REVOKE ALL ON pg_catalog.citus_schemas FROM public;
     GRANT SELECT ON pg_catalog.citus_schemas TO public;
 END IF;
 
