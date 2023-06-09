@@ -100,6 +100,15 @@ DROP TABLE citus_schema_distribute_undistribute.tbl3 CASCADE;
 SELECT citus_schema_distribute('tenant1');
 SELECT citus_schema_undistribute('tenant1');
 
+-- foreign key from a reference table in another schema is not allowed
+CREATE TABLE tenant1.table3t(id int PRIMARY KEY);
+CREATE TABLE citus_schema_distribute_undistribute.tbl4(id int PRIMARY KEY REFERENCES tenant1.table3t(id));
+SELECT create_reference_table('citus_schema_distribute_undistribute.tbl4');
+SELECT citus_schema_distribute('tenant1');
+DROP TABLE citus_schema_distribute_undistribute.tbl4 CASCADE;
+SELECT citus_schema_distribute('tenant1');
+SELECT citus_schema_undistribute('tenant1');
+
 -- only allowed for schema owner or superuser
 CREATE USER dummyregular;
 SET role dummyregular;
@@ -327,9 +336,26 @@ SELECT result FROM run_command_on_all_nodes($$ SELECT schemaid::regnamespace as 
 SELECT result FROM run_command_on_all_nodes($$ SELECT COUNT(*)=0 FROM pg_dist_colocation FULL JOIN pg_dist_partition USING(colocationid) WHERE (logicalrelid::text LIKE 'tenant1.%' OR logicalrelid is NULL) AND colocationid > 0 $$);
 SELECT result FROM run_command_on_all_nodes($$ SELECT array_agg(logicalrelid ORDER BY logicalrelid) FROM pg_dist_partition WHERE logicalrelid::text LIKE 'tenant1.%' $$);
 
+-- create an empty tenant schema to verify colocation id is removed successfully after we undistribute it
+CREATE SCHEMA empty_tenant;
+SELECT citus_schema_distribute('empty_tenant');
+
+-- show the schema is a tenant schema now
+SELECT colocationid AS empty_tenant_colocid FROM pg_dist_tenant_schema schemaid \gset
+SELECT result FROM run_command_on_all_nodes($$ SELECT schemaid::regnamespace FROM pg_dist_colocation JOIN pg_dist_tenant_schema USING(colocationid) $$);
+
+SELECT citus_schema_undistribute('empty_tenant');
+
+-- show the schema is a regular schema now
+SELECT result FROM run_command_on_all_nodes($$ SELECT schemaid::regnamespace as schemaname FROM pg_dist_tenant_schema $$);
+SELECT '$$' || 'SELECT COUNT(*)=0 FROM pg_dist_colocation WHERE colocationid = ' || :empty_tenant_colocid || '$$'
+AS verify_empty_tenant_query \gset
+SELECT result FROM run_command_on_all_nodes(:verify_empty_tenant_query);
+
 -- cleanup
 DROP SCHEMA "CiTuS.TeeN" CASCADE;
 DROP SCHEMA tenant1 CASCADE;
+DROP SCHEMA empty_tenant CASCADE;
 DROP EXTENSION postgres_fdw CASCADE;
 DROP SCHEMA citus_schema_distribute_undistribute CASCADE;
 DROP USER tenantuser;
