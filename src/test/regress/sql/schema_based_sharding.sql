@@ -1001,8 +1001,24 @@ JOIN
 WHERE cs.schema_name::text LIKE 'citus\_sch_'
 ORDER BY cs.schema_name::text;
 
+-- test with non-privileged role
+CREATE USER citus_schema_nonpri;
+SET ROLE citus_schema_nonpri;
+
+SELECT schema_name, colocation_id > 0 AS colocation_id_visible, schema_size IS NOT NULL AS schema_size_visible, schema_owner
+FROM public.citus_schemas WHERE schema_name::text LIKE 'citus\_sch_' ORDER BY schema_name:text;
+
+RESET ROLE;
+
+-- test using citus_tables from workers
+\c - - - :worker_1_port
+SELECT schema_name, colocation_id > 0 AS colocation_id_visible, schema_size IS NOT NULL AS schema_size_visible, schema_owner
+FROM public.citus_schemas WHERE schema_name::text LIKE 'citus\_sch_' ORDER BY schema_name:text;
+\c - - - :master_port
+SET search_path TO regular_schema;
+
 SET client_min_messages TO WARNING;
 DROP SCHEMA regular_schema, tenant_3, tenant_5, tenant_7, tenant_6, type_sch, citus_sch1, citus_sch2 CASCADE;
-DROP ROLE citus_schema_role;
+DROP ROLE citus_schema_role, citus_schema_nonpri;
 
 SELECT citus_remove_node('localhost', :master_port);

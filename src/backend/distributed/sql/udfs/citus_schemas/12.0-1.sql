@@ -8,7 +8,7 @@ citus_schemas_create_query=$CSCQ$
         schemaid::regnamespace AS schema_name,
         colocationid AS colocation_id,
         (
-            SELECT pg_size_pretty(sum(citus_total_relation_size(logicalrelid)))
+            SELECT pg_size_pretty(sum(citus_total_relation_size(logicalrelid, fail_on_error:=false)))
             FROM pg_dist_partition pdp WHERE pdp.colocationid = ts.colocationid
         ) AS schema_size,
         pg_get_userbyid(nspowner) AS schema_owner
